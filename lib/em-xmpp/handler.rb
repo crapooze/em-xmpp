@@ -220,16 +220,16 @@ module EM::Xmpp
     end
 
     def bind_to_resource(wanted_res=nil)
-      c.send_raw(c.iq_stanza('type' => 'set') do
-        bind('xmlns' => Bind) do
-          resource(wanted_res) if wanted_res
+      c.send_raw(c.iq_stanza('type' => 'set') do |x|
+        x.bind('xmlns' => Bind) do |y|
+          y.resource(wanted_res) if wanted_res
         end
       end)
     end
 
     def start_session
-      c.send_raw(c.iq_stanza('type' => 'set', 'to' => jid.domain) do
-        session('xmlns' => Session) 
+      c.send_raw(c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
+        x.session('xmlns' => Session) 
       end)
     end
 

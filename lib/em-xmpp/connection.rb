@@ -58,22 +58,6 @@ module EM::Xmpp
       raise RuntimeError, "could not negotiate a stream:\n#{node}"
     end
 
-    def request_subscription(to)
-      send_raw(presence_stanza('to' => to, 'type'=> 'subscribe'))
-    end
-
-    def get_roster
-      send_raw(iq_stanza('from' => @jid.full) do
-        query('xmlns' => 'jabber:iq:roster')
-      end)
-    end
-
-    def send_message(to, body='')
-      send_raw(message_stanza('to' => to) do
-        body(body)
-      end)
-    end
-
     #should add 'xml:lang'
 
     def default_presence_config
@@ -90,22 +74,22 @@ module EM::Xmpp
 
     def presence_stanza(cfg={}, &blk)
       cfg = default_presence_config.merge(cfg)
-      build_xml do
-        presence(cfg, &blk)
+      build_xml do |x|
+        x.presence(cfg, &blk)
       end
     end
 
     def message_stanza(cfg={}, &blk)
       cfg = default_message_config.merge(cfg)
-      build_xml do
-        message(cfg, &blk)
+      build_xml do |x|
+        x.message(cfg, &blk)
       end
     end
 
     def iq_stanza(cfg={}, &blk)
       cfg = default_iq_config.merge(cfg)
-      build_xml do
-        iq(cfg, &blk)
+      build_xml do |x|
+        x.iq(cfg, &blk)
       end
     end
 

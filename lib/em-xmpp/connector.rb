@@ -227,8 +227,8 @@ module EM::Xmpp
     ### TLS World
 
     def ask_for_tls
-      send_xml do
-        starttls(:xmlns => TLS)
+      send_xml do |x|
+        x.starttls(:xmlns => TLS)
       end
     end
 
