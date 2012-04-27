@@ -27,8 +27,8 @@ module MyClient
 
     on_message do |s|
       p "*message> #{s.from}\n#{s.body}\n"
-      send_raw(s.reply do
-        body "you sent:#{s.body}"
+      send_raw(s.reply do |x|
+        x.body "you sent:#{s.body}"
       end)
       s
     end
