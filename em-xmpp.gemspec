@@ -6,7 +6,7 @@ Gem::Specification.new do |gem|
   gem.email         = ["crapooze@gmail.com"]
   gem.description   = %q{XMPP client for event machine}
   gem.summary       = %q{Easy to write and to extend XMPP client}
-  gem.homepage      = ""
+  gem.homepage      = "https://github.com/crapooze/em-xmpp"
 
   gem.files         = `git ls-files`.split($\)
   gem.executables   = gem.files.grep(%r{^bin/}).map{ |f| File.basename(f) }

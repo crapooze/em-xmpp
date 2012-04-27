@@ -19,6 +19,10 @@ module MyClient
   def ready
     puts "***** #{@jid} ready for #{self}"
 
+    on_exception(:anything) do |ctx|
+      raise ctx['error']
+    end
+
     on_presence do |s|
       p "*presence> #{s.from} #{s.show} (#{s.status})"
       send_raw(s.reply('type'=>'subscribed')) if s.subscription_request?
