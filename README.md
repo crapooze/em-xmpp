@@ -10,7 +10,7 @@ to easily match and reply to stanzas.
 
 ### Standard
 
-   gem install em-xmpp
+    gem install em-xmpp
 
 ### Bundler
 Add this line to your application's Gemfile:
@@ -83,10 +83,10 @@ take care when writing XML without and XML builder.
 Contexts for message/iq/presence provide a "reply" method that will pre-fill
 some fields for you. Otherwise, you can use 
 
-  data = message_stanza('to' => 'someone@somehost') do |xml| 
-           xml.body('hello world')
-         end
-  send_raw data
+    data = message_stanza('to' => 'someone@somehost') do |xml| 
+             xml.body('hello world')
+           end
+    send_raw data
 
 to send a stanza to someone. Note that since EM:Xmpp sets jabber:client as
 default namespace of the XML stream, you must not set the XML namespace for
