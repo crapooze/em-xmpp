@@ -7,6 +7,14 @@ module EM::Xmpp
   class Context
     attr_reader :connection, :stanza, :env
 
+    def []key
+      env[key]
+    end
+
+    def []=key,val
+      env[key]= val
+    end
+
     def default_env
       {'modules' => [], 'done' => false}
     end
@@ -61,8 +69,6 @@ module EM::Xmpp
               self.class.const_get(modname.to_s.capitalize)
             end
       env['modules'] << mod
-      # obj = self.dup
-      # env['modules'].each {|mod| obj.extend mod }
       obj = self
       obj.extend mod
       obj

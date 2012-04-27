@@ -5,8 +5,6 @@ require 'em-xmpp/handler'
 require 'em-xmpp/jid'
 require 'em-xmpp/cert_store'
 require 'eventmachine'
-require 'base64'
-require 'digest/md5'
 
 module EM::Xmpp
   class Connection < EM::Connection

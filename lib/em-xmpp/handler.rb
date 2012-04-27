@@ -83,7 +83,7 @@ module EM::Xmpp
         @xpaths = run_xpath_handlers ctx, @xpaths
       end
     rescue => err
-      ctx.env['error'] = err
+      ctx['error'] = err
       @exception_xpaths = run_xpath_handlers ctx, @exception_xpaths
     end
 
@@ -91,7 +91,7 @@ module EM::Xmpp
     def run_xpath_handlers(ctx, handlers)
       handlers.map do |x|
         if (not ctx.done?) and (x.match?(ctx.stanza))
-          ctx.env['xpath.handler'] = x
+          ctx['xpath.handler'] = x
           ctx = x.blk.call(ctx)
           raise RuntimeError, "xpath handlers should return a Context" unless ctx.is_a?(Context)
 
