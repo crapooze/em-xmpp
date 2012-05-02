@@ -2,9 +2,9 @@
 module EM::Xmpp
   class StanzaMatcher
     attr_reader :matcher
-    attr_reader :callback
 
-    def initialize(obj,args,cb)
+    def initialize(obj=nil,args={},&blk)
+      obj ||= blk
       @matcher = case obj
                  when :anything
                    proc { true }
@@ -13,11 +13,7 @@ module EM::Xmpp
                  else
                    obj
                  end
-
-      @callback = cb
     end
-
-    alias :blk :callback
 
     def match?(xml)
       matcher.call xml

@@ -34,15 +34,17 @@ module MyClient
       raise ctx['error']
     end
 
-    proc1 = proc do |ctx|
+
+    m = EM::Xmpp::StanzaMatcher.new do |ctx|
       p "proc-ing"
       true
     end
-    proc2 = proc do |ctx|
+    h = EM::Xmpp::StanzaHandler.new(m, proc do |ctx|
       p "proc-ed"
       ctx
-    end
-    @handler.match EM::Xmpp::StanzaMatcher.new(proc1, nil, proc2)
+    end)
+
+    @handler.add_handler h
 
     on_presence do |s|
       p "*presence> #{s.from} #{s.show} (#{s.status})"

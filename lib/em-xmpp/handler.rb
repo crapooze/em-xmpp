@@ -2,6 +2,7 @@
 require 'em-xmpp/namespaces'
 require 'em-xmpp/context'
 require 'em-xmpp/stanza_matcher'
+require 'em-xmpp/stanza_handler'
 require 'base64'
 require 'sasl/base'
 require 'sasl'
@@ -12,8 +13,8 @@ module EM::Xmpp
 
     def initialize(conn)
       @connection         = conn
-      @matchers           = []
-      @exception_matchers = []
+      @handlers           = []
+      @exception_handlers = []
 
       stack_decorators
     end
@@ -66,20 +67,26 @@ module EM::Xmpp
       end
     end
 
-    def match(matcher)
-      @matchers << matcher
+    def add_handler(handler)
+      @handlers << handler
     end
 
-    def match_exception(matcher)
-      @exception_matchers << matcher
+    def add_exception_handler(handler)
+      @exception_handlers << handler
     end
 
     def on(path, args={}, &blk)
-      match StanzaMatcher.new(path, args, blk)
+      matcher = StanzaMatcher.new(path, args)
+      handler = StanzaHandler.new(matcher, blk)
+      add_handler handler
+      handler
     end
 
     def on_exception(path, args={}, &blk)
-      match_exception StanzaMatcher.new(path, args, blk)
+      matcher = StanzaMatcher.new(path, args)
+      handler = StanzaHandler.new(matcher, &blk)
+      add_exception_handler handler
+      handler
     end
 
     # wraps the stanza in a context and calls handle_context
@@ -87,9 +94,9 @@ module EM::Xmpp
       handle_context Context.new(@connection, stanza)
     end
 
-    # runs all matchers against the stanza context
+    # runs all handlers against the stanza context
     # catches all exception (in which case, the context gets passed to all
-    # exception_matchers)
+    # exception_handlers)
     #
     # an xpath handler can:
     # - throw :halt to shortcircuit everything
@@ -98,25 +105,17 @@ module EM::Xmpp
     # handlers such as request/responses
     def handle_context(ctx)
       catch :halt do
-        @matchers = run_xpath_handlers ctx, @matchers
+        @handlers = run_xpath_handlers ctx, @handlers
       end
     rescue => err
       ctx['error'] = err
-      @exception_matchers = run_xpath_handlers ctx, @exception_matchers
+      @exception_handlers = run_xpath_handlers ctx, @exception_handlers
     end
 
     # runs all handlers and returns a list of handlers for the next stanza
     def run_xpath_handlers(ctx, handlers)
       handlers.map do |x|
-        if (not ctx.done?) and (x.match?(ctx.stanza))
-          ctx['xpath.handler'] = x
-          ctx = x.blk.call(ctx)
-          raise RuntimeError, "xpath handlers should return a Context" unless ctx.is_a?(Context)
-
-          x if ctx.reuse_handler?
-        else
-          x
-        end
+        x.call ctx
       end.compact
     end
   end
@@ -168,6 +167,9 @@ module EM::Xmpp
     end
 
     def setup_handlers
+      on_exception(:anything) do |ctx|
+        raise ctx['error']
+      end
       on('//xmlns:starttls', {'xmlns' => TLS}) do |ctx|
         @connection.ask_for_tls 
         ctx.delete_xpath_handler!.done!
