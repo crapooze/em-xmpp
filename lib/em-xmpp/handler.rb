@@ -1,6 +1,7 @@
 
 require 'em-xmpp/namespaces'
 require 'em-xmpp/context'
+require 'em-xmpp/stanza_matcher'
 require 'base64'
 require 'sasl/base'
 require 'sasl'
@@ -9,16 +10,10 @@ module EM::Xmpp
   class Handler
     include Namespaces
 
-    Xpath = Struct.new(:path, :args, :blk) do
-      def match?(xml)
-        path == :anything or xml.xpath(path, args).any?
-      end
-    end
-
     def initialize(conn)
       @connection         = conn
-      @xpaths             = []
-      @exception_xpaths   = []
+      @matchers           = []
+      @exception_matchers = []
 
       stack_decorators
     end
@@ -36,9 +31,21 @@ module EM::Xmpp
     end
 
     def stack_decorators
-      on_presence { |ctx| ctx.with(:presence) }
-      on_message  { |ctx| ctx.with(:message) }
-      on_iq       { |ctx| ctx.with(:iq) }
+      on_presence do |ctx| 
+        ctx = ctx.with(:presence) 
+        ctx = ctx.with(:error) if ctx.error?
+        ctx
+      end
+      on_message  do |ctx| 
+        ctx = ctx.with(:message) 
+        ctx = ctx.with(:error) if ctx.error?
+        ctx
+      end
+      on_iq       do |ctx| 
+        ctx = ctx.with(:iq) 
+        ctx = ctx.with(:error) if ctx.error?
+        ctx
+      end
       on('//xmlns:delay', 'xmlns' => Delay) do |ctx|
         ctx.with(:delay)
       end
@@ -54,14 +61,25 @@ module EM::Xmpp
       on('//xmlns:x', 'xmlns' => DataForms) do |ctx|
         ctx.with(:dataforms)
       end
+      on('//xmlns:x', 'xmlns' => MucUser) do |ctx|
+        ctx.with(:mucuser)
+      end
+    end
+
+    def match(matcher)
+      @matchers << matcher
+    end
+
+    def match_exception(matcher)
+      @exception_matchers << matcher
     end
 
     def on(path, args={}, &blk)
-      @xpaths << Xpath.new(path, args, blk)
+      match StanzaMatcher.new(path, args, blk)
     end
 
     def on_exception(path, args={}, &blk)
-      @exception_xpaths << Xpath.new(path, args, blk)
+      match_exception StanzaMatcher.new(path, args, blk)
     end
 
     # wraps the stanza in a context and calls handle_context
@@ -69,9 +87,9 @@ module EM::Xmpp
       handle_context Context.new(@connection, stanza)
     end
 
-    # runs all xpath_handlers against the stanza context
+    # runs all matchers against the stanza context
     # catches all exception (in which case, the context gets passed to all
-    # exception_xpaths)
+    # exception_matchers)
     #
     # an xpath handler can:
     # - throw :halt to shortcircuit everything
@@ -80,11 +98,11 @@ module EM::Xmpp
     # handlers such as request/responses
     def handle_context(ctx)
       catch :halt do
-        @xpaths = run_xpath_handlers ctx, @xpaths
+        @matchers = run_xpath_handlers ctx, @matchers
       end
     rescue => err
       ctx['error'] = err
-      @exception_xpaths = run_xpath_handlers ctx, @exception_xpaths
+      @exception_matchers = run_xpath_handlers ctx, @exception_matchers
     end
 
     # runs all handlers and returns a list of handlers for the next stanza
@@ -220,7 +238,7 @@ module EM::Xmpp
     end
 
     def bind_to_resource(wanted_res=nil)
-      c.send_raw(c.iq_stanza('type' => 'set') do |x|
+      c.send_stanza(c.iq_stanza('type' => 'set') do |x|
         x.bind('xmlns' => Bind) do |y|
           y.resource(wanted_res) if wanted_res
         end
@@ -228,7 +246,7 @@ module EM::Xmpp
     end
 
     def start_session
-      c.send_raw(c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
+      c.send_stanza(c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
         x.session('xmlns' => Session) 
       end)
     end

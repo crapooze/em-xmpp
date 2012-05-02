@@ -74,7 +74,7 @@ module EM::Xmpp
       obj
     end
 
-    module Stanza
+    module IncomingStanza
       include Namespaces
       %w{type id lang}.each do |w|
         define_method w do
@@ -87,10 +87,39 @@ module EM::Xmpp
       def from
         read_attr(stanza, 'from'){|j| JID.parse(j)}
       end
+      def error?
+        type == 'error'
+      end
+    end
+
+    module Error
+      def error_node
+        xpath('//xmlns:error',{'xmlns' => Client}).first
+      end
+
+      def error_code
+        n = error_node
+        read_attr(n, 'code') if n
+      end
+
+      def error_type
+        n = error_node
+        read_attr(n, 'type') if n
+      end
+
+      def error_condition_node
+        n = error_node
+        n.children.first if n
+      end
+
+      def error_condition
+        n = error_condition_node
+        n.name if n
+      end
     end
 
     module Presence
-      include Stanza
+      include IncomingStanza
       def reply_default_params
         jid = @connection.jid.full
         {'from' => jid, 'to' => from, 'id' => id}
@@ -126,7 +155,7 @@ module EM::Xmpp
     end
 
     module Message
-      include Stanza
+      include IncomingStanza
       def subject_node
         xpath('//xmlns:subject',{'xmlns' => Client}).first
       end
@@ -158,7 +187,7 @@ module EM::Xmpp
     end
 
     module Iq
-      include Stanza
+      include IncomingStanza
       def reply_default_params
         jid = @connection.jid.full
         {'from' => jid, 'to' => from, 'type' => 'result', 'id' => id}
@@ -243,6 +272,40 @@ module EM::Xmpp
           n = c_node
           read_attr(n, word) if n
         end
+      end
+    end
+
+    module Mucuser
+      def x_node
+        xpath('//xmlns:x',{'xmlns' => EM::Xmpp::Namespaces::MucUser}).first
+      end
+
+      def item_node
+        xpath('//xmlns:item',{'xmlns' => EM::Xmpp::Namespaces::MucUser}).first
+      end
+
+      def status_node
+        xpath('//xmlns:status',{'xmlns' => EM::Xmpp::Namespaces::MucUser}).first
+      end
+
+      def status
+        n = status_node
+        read_attr(n, 'code') if n
+      end
+
+      def jid
+        n = item_node
+        JID.parse read_attr(n, 'jid') if n
+      end
+
+      def affiliation
+        n = item_node
+        read_attr(n, 'affiliation') if n
+      end
+
+      def role
+        n = item_node
+        read_attr(n, 'role') if n
       end
     end
   end

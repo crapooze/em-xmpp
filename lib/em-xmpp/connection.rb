@@ -48,7 +48,7 @@ module EM::Xmpp
     def negotiation_finished
       @pass    = nil
       @handler = Routine.new self
-      send_raw presence_stanza()
+      send_stanza presence_stanza()
       ready
     end
 
@@ -56,44 +56,61 @@ module EM::Xmpp
       raise RuntimeError, "could not negotiate a stream:\n#{node}"
     end
 
-    #should add 'xml:lang'
+    OutgoingStanza = Struct.new(:xml, :params)
 
-    def default_presence_config
+    def default_presence_params
       {}
     end
 
-    def default_message_config
+    def default_message_params
       {'to' => @jid.domain, 'id' => "em-xmpp.#{rand(65535)}"}
     end
 
-    def default_iq_config
+    def default_iq_params
       {'type' => 'get', 'id' => "em-xmpp.#{rand(65535)}"}
     end
 
-    def presence_stanza(cfg={}, &blk)
-      cfg = default_presence_config.merge(cfg)
-      build_xml do |x|
-        x.presence(cfg, &blk)
+    def presence_stanza(params={}, &blk)
+      params = default_presence_params.merge(params)
+      xml = build_xml do |x|
+        x.presence(params, &blk)
       end
+      OutgoingStanza.new xml, params
     end
 
-    def message_stanza(cfg={}, &blk)
-      cfg = default_message_config.merge(cfg)
-      build_xml do |x|
-        x.message(cfg, &blk)
+    def message_stanza(params={}, &blk)
+      params = default_message_params.merge(params)
+      xml = build_xml do |x|
+        x.message(params, &blk)
       end
+      OutgoingStanza.new xml, params
     end
 
-    def iq_stanza(cfg={}, &blk)
-      cfg = default_iq_config.merge(cfg)
-      build_xml do |x|
-        x.iq(cfg, &blk)
+    def iq_stanza(params={}, &blk)
+      params = default_iq_params.merge(params)
+      xml = build_xml do |x|
+        x.iq(params, &blk)
+      end
+      OutgoingStanza.new xml, params
+    end
+
+    def send_stanza(stanza)
+      send_raw stanza.xml
+      if block_given?
+        on(:anything) do |ctx|
+          if ctx.id == stanza.params['id']
+            yield ctx
+            ctx.delete_xpath_handler!
+          else
+            ctx
+          end
+        end
       end
     end
 
     %w{on on_exception on_presence on_iq on_message}.each do |meth|
       define_method(meth) do |*args,&blk|
-      @handler.send meth, *args, &blk
+        @handler.send meth, *args, &blk
       end
     end
 

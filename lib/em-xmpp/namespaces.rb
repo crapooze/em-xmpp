@@ -27,5 +27,11 @@ module EM::Xmpp
     Delay = "urn:xmpp:delay"
     #Jabber Data forms
     DataForms  = 'jabber:x:data'
+    #Multi user chat - simple user
+    MucUser = 'http://jabber.org/protocol/muc#user'
+    #Multi user chat - owner
+    MucOwner = 'http://jabber.org/protocol/muc#owner'
+    #Multi user chat - roomconfig
+    MucRoomconfig = 'http://jabber.org/protocol/muc#roomconfig'
   end
 end
