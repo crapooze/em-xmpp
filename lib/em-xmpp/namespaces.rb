@@ -21,6 +21,8 @@ module EM::Xmpp
     DiscoverItems = "http://jabber.org/protocol/disco#items"
     #XMPP info discovery
     DiscoverInfos = "http://jabber.org/protocol/disco#infos"
+    #Jabber Roster
+    Roster = 'jabber:iq:roster'
     #XMPP commands
     Commands = "http://jabber.org/protocol/commands"
     #entity nicknames

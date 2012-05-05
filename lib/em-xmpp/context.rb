@@ -288,6 +288,33 @@ module EM::Xmpp
       end
     end
 
+    module Roster
+      def query_node
+        xpath('//xmlns:query',{'xmlns' => EM::Xmpp::Namespaces::Roster}).first
+      end
+
+      def items
+        n = query_node
+        if n
+          n.children.map do |xml|
+            new_subscription(xml)
+          end
+        end
+      end
+
+      private
+
+      Subscription = Struct.new(:type, :jid, :name, :groups)
+
+      def new_subscription(n)
+        type = read_attr(n,'subscription')
+        jid  = read_attr(n,'jid') {|x| JID.parse x}
+        name = read_attr(n,'name')
+        groups = n.xpath('xmlns:group', 'xmlns' => EM::Xmpp::Namespaces::Roster).map{|n| n.content}
+        Subscription.new(type, jid, name, groups)
+      end
+    end
+
     module Nickname
       def nickname_node
         xpath('//xmlns:nick',{'xmlns' => Nick}).first

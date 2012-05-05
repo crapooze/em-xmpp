@@ -56,6 +56,9 @@ module EM::Xmpp
       on('//xmlns:query', 'xmlns' => DiscoverItems) do |ctx|
         ctx.with(:discoitems)
       end
+      on('//xmlns:query', 'xmlns' => Roster) do |ctx|
+        ctx.with(:roster)
+      end
       on('//xmlns:command', 'xmlns' => Commands) do |ctx|
         ctx.with(:command)
       end
