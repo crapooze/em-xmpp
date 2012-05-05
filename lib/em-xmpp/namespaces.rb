@@ -27,6 +27,12 @@ module EM::Xmpp
     Commands = "http://jabber.org/protocol/commands"
     #entity nicknames
     Nick = "http://jabber.org/protocol/nick"
+    #entity activity
+    Activity = "http://jabber.org/protocol/activity"
+    #entity mood
+    Mood = "http://jabber.org/protocol/mood"
+    #entity geoloc
+    Geoloc = "http://jabber.org/protocol/geoloc"
     #XMPP delayed delivery
     Delay = "urn:xmpp:delay"
     #Jabber Data forms

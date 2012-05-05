@@ -325,6 +325,105 @@ module EM::Xmpp
       end
     end
 
+    module Geolocation
+      def geoloc_node
+        xpath('//xmlns:nick',{'xmlns' => Geoloc}).first
+      end
+
+      %w{accuracy error alt lat lon bearing speed}.each do |decimal|
+        define_method(decimal) do 
+          n = geoloc_node
+          if n
+            d = n.children.find{|c| c.name == decimal}
+            d.content.to_i if d
+          end
+        end
+      end
+
+      %w{area building country countrycode datum description floor locality postalcode region room street text uri}.each do |str|
+        define_method(str) do 
+          n = geoloc_node
+          if n
+            d = n.children.find{|c| c.name == str}
+            d.content
+          end
+        end
+      end
+
+      def timestamp
+        n = geoloc_node
+        if n
+          d = n.children.find{|c| c.name == 'timestamp'}
+          Time.parse d.content if d
+        end
+      end
+    end
+
+    module Useractivity
+      def activity_node
+        xpath('//xmlns:mood',{'xmlns' => Namespaces::Activity}).first
+      end
+
+      def activity_category_node
+        n = activity_node
+        n.children.first if n
+      end
+
+      def activity_text_node
+        n = activity_node
+        n.children.find{|n| n.name == 'text'} if n
+      end
+
+      def activity
+        ret = []
+        n = activity_category_node
+        if n
+          ret << n.name 
+          detail = n.children.first
+          ret << detail.name if detail
+        end
+        ret
+      end
+
+      def activity_text
+        n = activity_text_node
+        n.content if n
+      end
+    end
+
+    module Mood
+      DefinedMoods = %w{afraid amazed angry amorous annoyed anxious aroused
+ashamed bored brave calm cautious cold confident confused contemplative
+contented cranky crazy creative curious dejected depressed disappointed
+disgusted dismayed distracted embarrassed envious excited flirtatious
+frustrated grumpy guilty happy hopeful hot humbled humiliated hungry hurt
+impressed in_awe in_love indignant interested intoxicated invincible jealous
+lonely lucky mean moody nervous neutral offended outraged playful proud relaxed
+relieved remorseful restless sad sarcastic serious shocked shy sick sleepy
+spontaneous stressed strong surprised thankful thirsty tired undefined weak
+worried}.freeze
+
+      def mood_node
+        xpath('//xmlns:mood',{'xmlns' => Namespaces::Mood}).first
+      end
+      def mood_name_node
+        n = mood_node
+        n.children.find{|c| DefinedMoods.include?(c.name)} if n
+      end
+      def mood_text_node
+        n = mood_node
+        n.children.find{|c| c.name == 'text'}
+      end
+      def mood
+        n = mood_name_node
+        n.name if n
+      end
+      def mood
+        n = mood_text_node
+        n.content if n
+      end
+    end
+
     module Mucuser
       def x_node
         xpath('//xmlns:x',{'xmlns' => EM::Xmpp::Namespaces::MucUser}).first
