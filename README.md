@@ -76,7 +76,7 @@ See the ./samples directory for basic examples.
 
 EM::XMPP for now builds stanzas with Nokogiri::XML::Builder in the form with an
 explicit block argument.
-Then you send raw_strings with Connection#send_raw.
+Then you send raw_strings with Connection#send_raw or pre-built stanzas with Connection#send_stanza.
 Note that if you send malformed XML, your server will disconnect you. Hence,
 take care when writing XML without and XML builder.
 
@@ -86,7 +86,7 @@ some fields for you. Otherwise, you can use
     data = message_stanza('to' => 'someone@somehost') do |xml| 
              xml.body('hello world')
            end
-    send_raw data
+    send_stanza data
 
 to send a stanza to someone. Note that since EM:Xmpp sets jabber:client as
 default namespace of the XML stream, you must not set the XML namespace for
