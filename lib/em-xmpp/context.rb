@@ -90,6 +90,9 @@ module EM::Xmpp
       def error?
         type == 'error'
       end
+      def delay?
+        false
+      end
     end
 
     module Error
@@ -207,6 +210,9 @@ module EM::Xmpp
     end
 
     module Delay
+      def delay?
+        true
+      end
       #does not handle legacy delay
       def delay_node
         xpath('//xmlns:delay',{'xmlns' => EM::Xmpp::Namespaces::Delay}).first
@@ -312,7 +318,8 @@ module EM::Xmpp
 
       def jid
         n = item_node
-        JID.parse read_attr(n, 'jid') if n
+        jid_str = read_attr(n, 'jid') if n
+        JID.parse jid_str if jid_str
       end
 
       def affiliation
