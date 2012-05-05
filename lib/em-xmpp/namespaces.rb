@@ -33,6 +33,8 @@ module EM::Xmpp
     Mood = "http://jabber.org/protocol/mood"
     #entity geoloc
     Geoloc = "http://jabber.org/protocol/geoloc"
+    #entity's song
+    Tune = "http://jabber.org/protocol/tune"
     #XMPP delayed delivery
     Delay = "urn:xmpp:delay"
     #Jabber Data forms

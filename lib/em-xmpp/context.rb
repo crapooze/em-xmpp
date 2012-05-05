@@ -2,6 +2,7 @@
 require 'em-xmpp/jid'
 require 'em-xmpp/namespaces'
 require 'time'
+require 'ostruct'
 
 module EM::Xmpp
   class Context
@@ -315,6 +316,45 @@ module EM::Xmpp
       end
     end
 
+    module Tune
+      def tune_node
+        xpath('//xmlns:tune',{'xmlns' => Namespaces::Tune}).first
+      end
+
+      DecimalFields = %w{length rating}.freeze
+      StringFields = %w{artist source title track uri}.freeze
+
+      DecimalFields.each do |decimal|
+        define_method(decimal) do 
+          n = tune_node
+          if n
+            d = n.children.find{|c| c.name == decimal}
+            d.content.to_i if d
+          end
+        end
+      end
+
+
+      StringFields.each do |str|
+        define_method(str) do 
+          n = tune_node
+          if n
+            d = n.children.find{|c| c.name == str}
+            d.content
+          end
+        end
+      end
+
+      def tune
+        ostruct = OpenStruct.new
+        (StringFields + DecimalFields).each do |field|
+          val = send field
+          ostruct.send("#{field}=", val)
+        end
+        ostruct
+      end
+    end
+
     module Nickname
       def nickname_node
         xpath('//xmlns:nick',{'xmlns' => Nick}).first
@@ -330,7 +370,20 @@ module EM::Xmpp
         xpath('//xmlns:nick',{'xmlns' => Geoloc}).first
       end
 
-      %w{accuracy error alt lat lon bearing speed}.each do |decimal|
+      def geoloc
+        ostruct = OpenStruct.newt
+        (StringFields + DecimalFields + %w{timestamp}).each do |field|
+          val = send field
+          ostruct.send("#{field}=", val)
+        end
+        ostruct
+      end
+
+      StringFields = %w{area building country countrycode datum description
+        floor locality postalcode region room street text uri}.freeze
+      DecimalFields = %w{accuracy error alt lat lon bearing speed}.freeze
+
+      DecimalFields.each do |decimal|
         define_method(decimal) do 
           n = geoloc_node
           if n
@@ -340,7 +393,7 @@ module EM::Xmpp
         end
       end
 
-      %w{area building country countrycode datum description floor locality postalcode region room street text uri}.each do |str|
+      StringFields.each do |str|
         define_method(str) do 
           n = geoloc_node
           if n
