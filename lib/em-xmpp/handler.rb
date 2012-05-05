@@ -62,6 +62,9 @@ module EM::Xmpp
       on('//xmlns:x', 'xmlns' => DataForms) do |ctx|
         ctx.with(:dataforms)
       end
+      on('//xmlns:nick', 'xmlns' => Nick) do |ctx|
+        ctx.with(:nickname)
+      end
       on('//xmlns:x', 'xmlns' => MucUser) do |ctx|
         ctx.with(:mucuser)
       end
@@ -73,6 +76,14 @@ module EM::Xmpp
 
     def add_exception_handler(handler)
       @exception_handlers << handler
+    end
+
+    def remove_handler(handler)
+      @handlers.delete handler
+    end
+
+    def remove_exception_handler(handler)
+      @exception_handlers.delete handler
     end
 
     def on(path, args={}, &blk)
@@ -105,7 +116,7 @@ module EM::Xmpp
     # handlers such as request/responses
     def handle_context(ctx)
       catch :halt do
-        @handlers = run_xpath_handlers ctx, @handlers
+        @handlers = run_xpath_handlers ctx, @handlers.dup
       end
     rescue => err
       ctx['error'] = err

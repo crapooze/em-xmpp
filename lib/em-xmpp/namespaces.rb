@@ -23,6 +23,8 @@ module EM::Xmpp
     DiscoverInfos = "http://jabber.org/protocol/disco#infos"
     #XMPP commands
     Commands = "http://jabber.org/protocol/commands"
+    #entity nicknames
+    Nick = "http://jabber.org/protocol/nick"
     #XMPP delayed delivery
     Delay = "urn:xmpp:delay"
     #Jabber Data forms

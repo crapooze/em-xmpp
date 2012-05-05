@@ -152,6 +152,9 @@ module EM::Xmpp
       def subscription_request?
         type == 'subscribe'
       end
+      def entity_left?
+        type == 'unavailable'
+      end
     end
 
     module Message
@@ -183,6 +186,10 @@ module EM::Xmpp
       def reply(args={},&blk)
         args = reply_default_params.merge args
         @connection.message_stanza(args,&blk)
+      end
+
+      def groupchat?
+        type == 'groupchat'
       end
     end
 
@@ -272,6 +279,16 @@ module EM::Xmpp
           n = c_node
           read_attr(n, word) if n
         end
+      end
+    end
+
+    module Nickname
+      def nickname_node
+        xpath('//xmlns:nick',{'xmlns' => Nick}).first
+      end
+      def nickname
+        n = nickname_node
+        n.content if n
       end
     end
 
