@@ -301,13 +301,31 @@ module EM::Xmpp
     end
 
     module Dataforms
-      def x_node
-        xpath('//xmlns:x',{'xmlns' => DataForms}).first
+      Form  = Struct.new(:type, :fields)
+      Field = Struct.new(:var, :type, :values) do
+        def value
+          values.first
+        end
       end
 
-      def x_type
-        n = x_node
-        read_attr(n, 'type') if n
+      def x_form_nodes
+        xpath('//xmlns:x',{'xmlns' => Namespaces::DataForms})
+      end
+
+      def x_forms
+        x_form_nodes.map do |form|
+          form_type = read_attr(form, 'type')
+          field_nodes = form.xpath('xmlns:field',{'xmlns' => Namespaces::DataForms})
+          fields = field_nodes.map do |field|
+            var  = read_attr(field, 'var')
+            type = read_attr(field, 'type')
+            value_nodes = field.xpath('xmlns:value',{'xmlns' => Namespaces::DataForms})
+            values = value_nodes.map(&:content)
+
+            Field.new(var,type,values)
+          end
+          Form.new form_type, fields
+        end
       end
     end
 
