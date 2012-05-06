@@ -1,5 +1,6 @@
 
 require 'em-xmpp/jid'
+require 'em-xmpp/entity'
 require 'em-xmpp/namespaces'
 require 'time'
 require 'ostruct'
@@ -83,10 +84,10 @@ module EM::Xmpp
         end
       end
       def to
-        read_attr(stanza, 'to'){|j| JID.parse(j)}
+        read_attr(stanza, 'to'){|j| @connection.entity(j)}
       end
       def from
-        read_attr(stanza, 'from'){|j| JID.parse(j)}
+        read_attr(stanza, 'from'){|j| @connection.entity(j)}
       end
       def error?
         type == 'error'
@@ -236,15 +237,49 @@ module EM::Xmpp
 
     module Discoinfos
       include Discoveries
+      Identity = Struct.new(:name, :category, :type)
+      Feature  = Struct.new(:var)
       def query_node
         xpath('//xmlns:query',{'xmlns' => DiscoverInfos}).first
+      end
+      def identities
+        n = query_node
+        if n
+          n.xpath('xmlns:identity',{'xmlns' => DiscoverInfos}).map do |x|
+            cat   = read_attr(x, 'category')
+            type  = read_attr(x, 'type')
+            name  = read_attr(x, 'name')
+            Identity.new name, cat, type
+          end
+        end
+      end
+      def features
+        n = query_node
+        if n
+          n.xpath('xmlns:feature',{'xmlns' => DiscoverInfos}).map do |x|
+            var = read_attr(x, 'var')
+            Feature.new var
+          end
+        end
       end
     end
 
     module Discoitems
       include Discoveries
+      Item = Struct.new(:entity, :node, :name)
       def query_node
         xpath('//xmlns:query',{'xmlns' => DiscoverItems}).first
+      end
+      def item_nodes
+        xpath('//xmlns:item',{'xmlns' => DiscoverItems})
+      end
+      def items
+        item_nodes.map do |n| 
+          entity = read_attr(n, 'jid'){|x| @connection.entity(x)}
+          node   = read_attr(n, 'node')
+          name   = read_attr(n, 'name')
+          Item.new(entity, node, name)
+        end
       end
     end
 
@@ -309,7 +344,7 @@ module EM::Xmpp
 
       def new_subscription(n)
         type = read_attr(n,'subscription')
-        jid  = read_attr(n,'jid') {|x| JID.parse x}
+        jid  = read_attr(n,'jid') {|x| @connection.entity x}
         name = read_attr(n,'name')
         groups = n.xpath('xmlns:group', 'xmlns' => EM::Xmpp::Namespaces::Roster).map{|n| n.content}
         Subscription.new(type, jid, name, groups)
@@ -498,7 +533,7 @@ worried}.freeze
       def jid
         n = item_node
         jid_str = read_attr(n, 'jid') if n
-        JID.parse jid_str if jid_str
+        @connection.entity jid_str if jid_str
       end
 
       def affiliation

@@ -13,11 +13,19 @@ module EM::Xmpp
     end
 
     def bare
-      [node,domain].map(&:to_s).join('@')
+      if node
+        [node,domain].map(&:to_s).join('@')
+      else
+        domain
+      end
     end
 
     def full
-      [bare,resource].map(&:to_s).join('/')
+      if resource
+        [bare,resource].map(&:to_s).join('/')
+      else
+        bare
+      end
     end
 
     def to_s

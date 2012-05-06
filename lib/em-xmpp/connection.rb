@@ -3,8 +3,10 @@ require 'em-xmpp/namespaces'
 require 'em-xmpp/connector'
 require 'em-xmpp/handler'
 require 'em-xmpp/jid'
+require 'em-xmpp/entity'
 require 'em-xmpp/cert_store'
 require 'eventmachine'
+require 'fiber'
 
 module EM::Xmpp
   class Connection < EM::Connection
@@ -34,7 +36,7 @@ module EM::Xmpp
     end
 
     def stanza_end(node)
-      @handler.handle(node)
+      Fiber.new { @handler.handle(node) }.resume
     end
 
     def unhandled_stanza(node)
@@ -42,7 +44,11 @@ module EM::Xmpp
     end
 
     def jid_received(jid)
-      @jid = JID.parse jid
+      @jid = entity jid
+    end
+
+    def entity(jid)
+      Entity.new(self, jid)
     end
 
     def negotiation_finished

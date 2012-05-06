@@ -144,7 +144,7 @@ module EM::Xmpp
         node.add_namespace_definition pfx, href
       end
 
-      puts "starting: #{name}, stack:#{@stack.size}" if $DEBUG
+      # puts "starting: #{name}, stack:#{@stack.size}" if $DEBUG
       case @stack.size
       when 0 #the streaming tag starts
         stream_support(node)
@@ -160,7 +160,7 @@ module EM::Xmpp
 
     def xml_end_element(name)
       node = @stack.pop
-      puts "ending: #{name}, stack:#{@stack.size}" if $DEBUG
+      #puts "ending: #{name}, stack:#{@stack.size}" if $DEBUG
 
       case @stack.size
       when 0 #i.e., the stream support ends
