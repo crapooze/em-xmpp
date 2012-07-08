@@ -21,6 +21,10 @@ module EM::Xmpp
       Entity.new(connection, jid.bare)
     end
 
+    def full
+      jid.full
+    end
+
     def to_s
       jid.to_s
     end
