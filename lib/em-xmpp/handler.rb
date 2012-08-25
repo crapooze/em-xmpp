@@ -89,16 +89,19 @@ module EM::Xmpp
       @exception_handlers.delete handler
     end
 
-    def on(path, args={}, &blk)
+    def handler_for(path,args,&blk)
       matcher = StanzaMatcher.new(path, args)
       handler = StanzaHandler.new(matcher, blk)
+    end
+
+    def on(path, args={}, &blk)
+      handler = handler_for path, args, &blk
       add_handler handler
       handler
     end
 
     def on_exception(path, args={}, &blk)
-      matcher = StanzaMatcher.new(path, args)
-      handler = StanzaHandler.new(matcher, &blk)
+      handler = handler_for path, args, &blk
       add_exception_handler handler
       handler
     end
@@ -119,18 +122,23 @@ module EM::Xmpp
     # handlers such as request/responses
     def handle_context(ctx)
       catch :halt do
-        @handlers = run_xpath_handlers ctx, @handlers.dup
+        run_xpath_handlers ctx, @handlers.dup, :remove_handler
       end
     rescue => err
       ctx['error'] = err
-      @exception_handlers = run_xpath_handlers ctx, @exception_handlers
+      run_xpath_handlers ctx, @exception_handlers, :remove_exception_handler
     end
 
     # runs all handlers and returns a list of handlers for the next stanza
-    def run_xpath_handlers(ctx, handlers)
-      handlers.map do |x|
-        x.call ctx
-      end.compact
+    def run_xpath_handlers(ctx, handlers, remover)
+      handlers.each do |h|
+        if (not ctx.done?) and (h.match?(ctx.stanza))
+          ctx['xpath.handler'] = h
+          ctx = h.call(ctx)
+          raise RuntimeError, "xpath handlers should return a Context" unless ctx.is_a?(Context)
+          send remover, h unless ctx.reuse_handler?
+        end
+      end
     end
   end
 

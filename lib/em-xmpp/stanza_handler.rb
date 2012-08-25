@@ -13,15 +13,7 @@ module EM::Xmpp
     end
 
     def call(ctx)
-      if (not ctx.done?) and (match?(ctx.stanza))
-        ctx['xpath.handler'] = self
-        ctx = callback.call(ctx)
-        raise RuntimeError, "xpath handlers should return a Context" unless ctx.is_a?(Context)
-
-        self if ctx.reuse_handler?
-      else
-        self
-      end
+      callback.call(ctx)
     end
   end
 end
