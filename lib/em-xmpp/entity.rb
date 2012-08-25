@@ -41,6 +41,41 @@ module EM::Xmpp
       connection.send_stanza pres
     end
 
+    def add_to_roster(display_name=nil,groups=[])
+      f = Fiber.current
+      item_fields = {:jid => jid.bare}
+      item_fields[:name] = display_name if display_name
+
+      query = connection.iq_stanza(:type => 'set') do |iq|
+        iq.query(:xmlns => Roster) do |q|
+          q.item item_fields
+          groups.each do |grp|
+            q.group grp
+          end
+        end
+      end
+
+      connection.send_stanza(query) do |ctx|
+        f.resume ctx
+      end
+      Fiber.yield
+    end
+
+    def remove_from_roster
+      f = Fiber.current
+      item_fields = {:jid => jid.bare, :subscription => 'remove'}
+
+      query = connection.iq_stanza(:type => 'set') do |iq|
+        iq.query(:xmlns => Roster) do |q|
+          q.item item_fields
+        end
+      end
+      connection.send_stanza(query) do |ctx|
+        f.resume ctx
+      end
+      Fiber.yield
+    end
+
     def discover_infos(node=nil)
       f = Fiber.current
       hash = {'xmlns' => Namespaces::DiscoverInfos}
