@@ -29,7 +29,17 @@ module EM::Xmpp
       jid.to_s
     end
 
-    #TODO: subscribe, unsubscribe, say, pub, sub, etc.
+    #TODO: say, pub, sub, etc.
+
+    def subscribe
+      pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'subscribe')
+      connection.send_stanza pres
+    end
+
+    def unsubscribe
+      pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'unsubscribe')
+      connection.send_stanza pres
+    end
 
     def discover_infos(node=nil)
       f = Fiber.current
