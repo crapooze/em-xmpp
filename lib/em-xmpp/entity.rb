@@ -5,6 +5,7 @@ require 'fiber'
 
 module EM::Xmpp
   class Entity
+    include Namespaces
     attr_reader :jid, :connection
 
     def initialize(connection, jid)
