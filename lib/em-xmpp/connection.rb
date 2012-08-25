@@ -13,13 +13,14 @@ module EM::Xmpp
     include Namespaces
     include Connector
 
-    attr_reader :jid, :pass
+    attr_reader :jid, :pass, :user_data
 
     def initialize(jid, pass, mod=nil, cfg={})
       @jid        = jid
       @pass       = pass.dup.freeze
       self.extend mod if mod
       certdir     = cfg[:certificates]
+      @user_data  = cfg[:data]
       @certstore  = if certdir
                       CertStore.new(certdir)
                     else
