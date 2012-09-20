@@ -30,7 +30,14 @@ module EM::Xmpp
       jid.to_s
     end
 
-    #TODO: say, pub, sub, etc.
+    #TODO: pub, sub, etc.
+
+    def say(body)
+      msg = connection.message_stanza(:to => jid) do |x|
+        x.body body
+      end
+      connection.send_stanza msg
+    end
 
     def subscribe
       pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'subscribe')
