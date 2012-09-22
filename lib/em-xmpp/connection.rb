@@ -104,7 +104,7 @@ module EM::Xmpp
     def send_stanza(stanza)
       send_raw stanza.xml
       if block_given?
-        on(:anything) do |ctx|
+        upon(:anything) do |ctx|
           if ctx.id == stanza.params['id']
             yield ctx
             ctx.delete_xpath_handler!
@@ -115,7 +115,7 @@ module EM::Xmpp
       end
     end
 
-    %w{on on_exception on_presence on_iq on_message}.each do |meth|
+    %w{upon on on_exception on_presence on_iq on_message on_decorator on_iq_decorator on_presence_decorator on_message_decorator}.each do |meth|
       define_method(meth) do |*args,&blk|
         @handler.send meth, *args, &blk
       end

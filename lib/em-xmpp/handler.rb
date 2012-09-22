@@ -14,71 +14,79 @@ module EM::Xmpp
     def initialize(conn)
       @connection         = conn
       @handlers           = []
+      @decorator_handlers = []
       @exception_handlers = []
 
       stack_decorators
     end
 
-    def on_presence(&blk)
-      on('//xmlns:presence', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    # wraps the stanza in a context and calls handle_context
+    def handle(stanza)
+      handle_context Context.new(@connection, stanza)
     end
 
-    def on_message(&blk)
-      on('//xmlns:message', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
-    end
-
-    def on_iq(&blk)
-      on('//xmlns:iq', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
-    end
+    private
 
     def stack_decorators
-      on_presence do |ctx| 
+      on_presence_decorator do |ctx| 
         ctx = ctx.with(:presence) 
         ctx = ctx.with(:error) if ctx.error?
         ctx
       end
-      on_message  do |ctx| 
+      on_message_decorator  do |ctx| 
         ctx = ctx.with(:message) 
         ctx = ctx.with(:error) if ctx.error?
         ctx
       end
-      on_iq       do |ctx| 
+      on_iq_decorator       do |ctx| 
         ctx = ctx.with(:iq) 
         ctx = ctx.with(:error) if ctx.error?
         ctx
       end
-      on('//xmlns:delay', 'xmlns' => Delay) do |ctx|
+      on_decorator('//xmlns:delay', 'xmlns' => Delay) do |ctx|
         ctx.with(:delay)
       end
-      on('//xmlns:query', 'xmlns' => DiscoverInfos) do |ctx|
+      on_decorator('//xmlns:query', 'xmlns' => DiscoverInfos) do |ctx|
         ctx.with(:discoinfos)
       end
-      on('//xmlns:query', 'xmlns' => DiscoverItems) do |ctx|
+      on_decorator('//xmlns:query', 'xmlns' => DiscoverItems) do |ctx|
         ctx.with(:discoitems)
       end
-      on('//xmlns:query', 'xmlns' => Roster) do |ctx|
+      on_decorator('//xmlns:query', 'xmlns' => Roster) do |ctx|
         ctx.with(:roster)
       end
-      on('//xmlns:command', 'xmlns' => Commands) do |ctx|
+      on_decorator('//xmlns:command', 'xmlns' => Commands) do |ctx|
         ctx.with(:command)
       end
-      on('//xmlns:x', 'xmlns' => DataForms) do |ctx|
+      on_decorator('//xmlns:x', 'xmlns' => DataForms) do |ctx|
         ctx.with(:dataforms)
       end
-      on('//xmlns:nick', 'xmlns' => Nick) do |ctx|
+      on_decorator('//xmlns:nick', 'xmlns' => Nick) do |ctx|
         ctx.with(:nickname)
       end
-      on('//xmlns:x', 'xmlns' => MucUser) do |ctx|
+      on_decorator('//xmlns:x', 'xmlns' => MucUser) do |ctx|
         ctx.with(:mucuser)
       end
+    end
+
+    def add_decorator_handler(handler)
+      @decorator_handlers << handler
     end
 
     def add_handler(handler)
       @handlers << handler
     end
 
+    def add_handler_before_the_other_handlers(handler)
+      @handlers.unshift handler
+    end
+
     def add_exception_handler(handler)
       @exception_handlers << handler
+    end
+
+    def remove_decorator_handler(handler)
+      @decorator_handlers.delete handler
     end
 
     def remove_handler(handler)
@@ -94,6 +102,44 @@ module EM::Xmpp
       handler = StanzaHandler.new(matcher, blk)
     end
 
+    public
+
+    def on_presence(&blk)
+      on('//xmlns:presence', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    end
+
+    def on_message(&blk)
+      on('//xmlns:message', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    end
+
+    def on_iq(&blk)
+      on('//xmlns:iq', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    end
+
+    def on_presence_decorator(&blk)
+      on_decorator('//xmlns:presence', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    end
+
+    def on_message_decorator(&blk)
+      on_decorator('//xmlns:message', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    end
+
+    def on_iq_decorator(&blk)
+      on_decorator('//xmlns:iq', 'xmlns' => EM::Xmpp::Namespaces::Client, &blk)
+    end
+
+    def on_decorator(path, args={}, &blk)
+      handler = handler_for path, args, &blk
+      add_decorator_handler handler
+      handler
+    end
+
+    def upon(path, args={}, &blk)
+      handler = handler_for path, args, &blk
+      add_handler_before_the_other_handlers handler
+      handler
+    end
+
     def on(path, args={}, &blk)
       handler = handler_for path, args, &blk
       add_handler handler
@@ -106,11 +152,9 @@ module EM::Xmpp
       handler
     end
 
-    # wraps the stanza in a context and calls handle_context
-    def handle(stanza)
-      handle_context Context.new(@connection, stanza)
-    end
+    private
 
+    # runs all decorator_handlers against the stanza context so that the context has all needed methods
     # runs all handlers against the stanza context
     # catches all exception (in which case, the context gets passed to all
     # exception_handlers)
@@ -122,14 +166,15 @@ module EM::Xmpp
     # handlers such as request/responses
     def handle_context(ctx)
       catch :halt do
+        run_xpath_handlers ctx, @decorator_handlers.dup, :remove_decorator_handler
         run_xpath_handlers ctx, @handlers.dup, :remove_handler
       end
     rescue => err
       ctx['error'] = err
-      run_xpath_handlers ctx, @exception_handlers, :remove_exception_handler
+      run_xpath_handlers ctx, @exception_handlers.dup, :remove_exception_handler
     end
 
-    # runs all handlers and returns a list of handlers for the next stanza
+    # runs all handlers, calls the remover method if a handler should be removed
     def run_xpath_handlers(ctx, handlers, remover)
       handlers.each do |h|
         if (not ctx.done?) and (h.match?(ctx.stanza))
@@ -260,6 +305,8 @@ module EM::Xmpp
       end
     end
 
+    private
+
     def extract_jid(stanza)
       jid = stanza.xpath('//bind:jid', {'bind' => Bind})
       jid.text if jid.any?
@@ -274,9 +321,18 @@ module EM::Xmpp
     end
 
     def start_session
-      c.send_stanza(c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
+      session_request = c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
         x.session('xmlns' => Session) 
-      end)
+      end
+
+      c.send_stanza(session_request) do |ctx|
+        if ctx.type == 'result'
+          @connection.negotiation_finished
+          ctx.delete_xpath_handler!.done!
+        else
+          @connection.negotiation_failed(ctx)
+        end
+      end
     end
 
     def start_sasl(methods)
