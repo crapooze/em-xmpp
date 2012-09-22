@@ -143,9 +143,10 @@ module EM::Xmpp
   end
 
   class XmppSASL < ::SASL::Preferences
-    attr_accessor :handler
+    attr_accessor :handler, :authzid
     def initialize(handler)
       @handler = handler
+      @authzid = handler.jid.bare.to_s
     end
     def realm
       handler.jid.domain
@@ -161,6 +162,9 @@ module EM::Xmpp
     end
     def password
       ret = handler.pass
+    end
+    def allow_plaintext?
+      true
     end
   end
 
@@ -252,7 +256,7 @@ module EM::Xmpp
       end
 
       on(:anything) do |ctx|
-        @connection.unhandled ctx.stanza
+        @connection.unhandled_stanza ctx.stanza
       end
     end
 
@@ -279,6 +283,8 @@ module EM::Xmpp
       @sasl = ::SASL.new(methods, XmppSASL.new(self))
       msg,val = sasl.start
       mech = sasl.mechanism
+      @sasl.preferences.authzid = nil if mech == "DIGEST-MD5"
+      val       =  Base64.strict_encode64(val) if val 
       reply_sasl(msg,val,mech)
     end
 
