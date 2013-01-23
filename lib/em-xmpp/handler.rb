@@ -67,6 +67,12 @@ module EM::Xmpp
       on_decorator('//xmlns:x', 'xmlns' => MucUser) do |ctx|
         ctx.with(:mucuser)
       end
+      on_decorator('//xmlns:si', 'xmlns' => StreamInitiation) do |ctx|
+        ctx.with(:streaminitiation)
+      end
+      on_decorator('//xmlns:query', 'xmlns' => ByteStreams) do |ctx|
+        ctx.with(:bytestreams)
+      end
     end
 
     def add_decorator_handler(handler)
