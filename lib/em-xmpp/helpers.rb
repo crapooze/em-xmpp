@@ -10,8 +10,8 @@ module EM::Xmpp
         iq.query(:xmlns => Roster)
       end
 
-      send_stanza roster do |rsp|
-        f.resume rsp.items
+      send_stanza(roster) do |response|
+        f.resume response.bit!(:roster).items
       end
 
       Fiber.yield

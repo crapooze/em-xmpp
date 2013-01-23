@@ -105,7 +105,7 @@ module EM::Xmpp
       send_raw stanza.xml
       if block_given?
         upon(:anything) do |ctx|
-          if ctx.id == stanza.params['id']
+          if ctx.bit!(:stanza).id == stanza.params['id']
             yield ctx
             ctx.delete_xpath_handler!
           else

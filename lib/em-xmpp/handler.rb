@@ -29,49 +29,59 @@ module EM::Xmpp
 
     def stack_decorators
       on_presence_decorator do |ctx| 
-        ctx = ctx.with(:presence) 
-        ctx = ctx.with(:error) if ctx.error?
+        presence = ctx.bit!(:presence) 
+        ctx.bit!(:error) if presence.error?
         ctx
       end
       on_message_decorator  do |ctx| 
-        ctx = ctx.with(:message) 
-        ctx = ctx.with(:error) if ctx.error?
+        msg = ctx.bit!(:message) 
+        ctx.bit!(:error) if msg.error?
         ctx
       end
       on_iq_decorator       do |ctx| 
-        ctx = ctx.with(:iq) 
-        ctx = ctx.with(:error) if ctx.error?
+        iq = ctx.bit!(:iq) 
+        ctx.bit!(:error) if iq.error?
         ctx
       end
       on_decorator('//xmlns:delay', 'xmlns' => Delay) do |ctx|
-        ctx.with(:delay)
+        ctx.bit!(:delay)
+        ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => DiscoverInfos) do |ctx|
-        ctx.with(:discoinfos)
+        ctx.bit!(:discoinfos)
+        ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => DiscoverItems) do |ctx|
-        ctx.with(:discoitems)
+        ctx.bit!(:discoitems)
+        ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => Roster) do |ctx|
-        ctx.with(:roster)
+        ctx.bit!(:roster)
+        ctx
       end
       on_decorator('//xmlns:command', 'xmlns' => Commands) do |ctx|
-        ctx.with(:command)
+        ctx.bit!(:command)
+        ctx
       end
       on_decorator('//xmlns:x', 'xmlns' => DataForms) do |ctx|
-        ctx.with(:dataforms)
+        ctx.bit!(:dataforms)
+        ctx
       end
       on_decorator('//xmlns:nick', 'xmlns' => Nick) do |ctx|
-        ctx.with(:nickname)
+        ctx.bit!(:nickname)
+        ctx
       end
       on_decorator('//xmlns:x', 'xmlns' => MucUser) do |ctx|
-        ctx.with(:mucuser)
+        ctx.bit!(:mucuser)
+        ctx
       end
       on_decorator('//xmlns:si', 'xmlns' => StreamInitiation) do |ctx|
-        ctx.with(:streaminitiation)
+        ctx.bit!(:streaminitiation)
+        ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => ByteStreams) do |ctx|
-        ctx.with(:bytestreams)
+        ctx.bit!(:bytestreams)
+        ctx
       end
     end
 
@@ -332,7 +342,7 @@ module EM::Xmpp
       end
 
       c.send_stanza(session_request) do |ctx|
-        if ctx.type == 'result'
+        if ctx.bit!(:stanza).type == 'result'
           @connection.negotiation_finished
           ctx.delete_xpath_handler!.done!
         else
