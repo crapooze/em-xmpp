@@ -749,6 +749,9 @@ end
       class Presence < Bit
         include Contexts::Presence
       end
+      class Message < Bit
+        include Contexts::Message
+      end
       class Iq < Bit
         include Contexts::Iq
       end
