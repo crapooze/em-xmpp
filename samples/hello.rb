@@ -19,22 +19,26 @@ module RosterClient
     puts "***** #{@jid} ready"
 
     on_presence do |ctx|
-      if ctx.subscription_request?
-        puts "**** accepting subscription from #{ctx.from}"
-        send_stanza ctx.reply('type'=>'subscribed')
-        ctx.from.subscribe
-        ctx.from.add_to_roster
+      presence = ctx.bit(:presence)
+
+      if presence.subscription_request?
+        puts "**** accepting subscription from #{presence.from}"
+        send_stanza presence.reply('type'=>'subscribed')
+        presence.from.subscribe
+        presence.from.add_to_roster
       else
-        puts "**** #{ctx.from} is present"
+        puts "**** #{presence.from} is present"
       end
 
       ctx #returns a ctx for subsequent handlers if any
     end
 
     on_message do |ctx|
-      puts "**** message from #{ctx.from}"
-      puts ctx.body
-      hello = ctx.reply do |rep|
+      msg = ctx.bit :message
+
+      puts "**** message from #{msg.from}"
+      puts msg.body
+      hello = msg.reply do |rep|
         rep.body "hello world"
       end
       send_stanza  hello
