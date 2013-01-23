@@ -69,6 +69,7 @@ module EM::Xmpp
       if $DEBUG
         $stderr.puts "using outdated <with> which is slow"
       end
+      bit! modname
       slow_with modname
     end
 
