@@ -109,7 +109,7 @@ module EM::Xmpp
     private 
 
     def bit_klass_name(obj)
-      obj.to_s.capitalize
+      obj.to_s.split('::').last.capitalize
     end
 
     def bit_from_klass(klass)
