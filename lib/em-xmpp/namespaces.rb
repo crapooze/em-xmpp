@@ -45,5 +45,15 @@ module EM::Xmpp
     MucOwner = 'http://jabber.org/protocol/muc#owner'
     #Multi user chat - roomconfig
     MucRoomconfig = 'http://jabber.org/protocol/muc#roomconfig'
+    #Stream initiation offer
+    StreamInitiation = 'http://jabber.org/protocol/si'
+    #FileTransfer
+    FileTransfer = 'http://jabber.org/protocol/si/profile/file-transfer'
+    #Feature Negotiation
+    FeatureNeg = 'http://jabber.org/protocol/feature-neg'
+    #ByteStreamTransfer
+    ByteStreams = 'http://jabber.org/protocol/bytestreams'
+    #Extension for Fast byte stream transfers
+    FastByteStreams = 'http://affinix.com/jabber/stream'
   end
 end
