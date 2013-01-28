@@ -15,6 +15,7 @@ module RosterClient
   attr_reader :roster
 
   include EM::Xmpp::Helpers
+
   def ready
     puts "***** #{@jid} ready"
 
@@ -37,11 +38,27 @@ module RosterClient
       msg = ctx.bit :message
 
       puts "**** message from #{msg.from}"
-      puts msg.body
-      hello = msg.reply do |rep|
-        rep.body "hello world"
+
+      if @conv 
+        @conv.resume ctx
+      else
+        x = rand(300)
+        y = rand(300)
+        @conv = start_conversation(ctx) do |c|
+          rep = c.send_stanza(msg.reply{|xml| xml.body("how much is #{x} - #{y} ?")}, 5)
+          greeting = if rep.interrupted?
+                       if rep.ctx.bit(:message).body == (x - y).to_s
+                         "great!"
+                       else
+                         "wrong: #{x - y}"
+                       end
+                     else
+                       "too slow, laggard"
+                     end
+          self.send_stanza(msg.reply{|xml| xml.body(greeting)})
+          @conv = nil
+        end
       end
-      send_stanza  hello
 
       ctx #returns a ctx for subsequent handlers if any
     end
