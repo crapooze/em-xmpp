@@ -1,5 +1,6 @@
 
 require 'em-xmpp/nodes'
+require 'em-xmpp/conversation'
 module EM::Xmpp
   module Helpers
     include EM::Xmpp::Namespaces
@@ -16,5 +17,10 @@ module EM::Xmpp
 
       Fiber.yield
     end
+
+    def start_conversation(ctx,&blk)
+      EM::Xmpp::Conversation.start(ctx,&blk)
+    end
+
   end
 end
