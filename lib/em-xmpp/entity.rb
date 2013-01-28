@@ -32,21 +32,21 @@ module EM::Xmpp
 
     #TODO: pub, sub, etc.
 
-    def say(body)
+    def say(body, &blk)
       msg = connection.message_stanza(:to => jid) do |x|
         x.body body
       end
-      connection.send_stanza msg
+      connection.send_stanza msg, &blk
     end
 
-    def subscribe
+    def subscribe(&blk)
       pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'subscribe')
-      connection.send_stanza pres
+      connection.send_stanza pres, &blk
     end
 
-    def unsubscribe
+    def unsubscribe(&blk)
       pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'unsubscribe')
-      connection.send_stanza pres
+      connection.send_stanza pres, &blk
     end
 
     def add_to_roster(display_name=nil,groups=[])
