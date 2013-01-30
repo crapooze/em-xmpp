@@ -1,0 +1,295 @@
+$LOAD_PATH.unshift './lib'
+require 'em-xmpp'
+require 'em-xmpp/helpers'
+require 'em-xmpp/conversation'
+
+if ARGV.empty?
+  puts "usage: #{__FILE__} <jid> <pass|passfile> <cmd>"
+  exit 0 
+end
+
+jid     = ARGV.first
+pass    = if File.file? ARGV[1]
+            File.read ARGV[1]
+          else
+            ARGV[1]
+          end
+
+class CommandParseError < ArgumentError
+end
+
+module Command extend self
+  def for(str)
+    cmd,param = str.split(':',2)
+    case cmd
+    when 'quit'
+      lambda do |client|
+        client.quit
+      end
+    when 'roster','list-roster','show-roster'
+      lambda do |client|
+        roster = client.get_roster
+        puts "buddy list"
+        groups = roster.map(&:groups).flatten
+        puts "==== No Group ==="
+        items = roster.select{|i| i.groups.empty?}
+        items.each do |item|
+          puts "#{item.name||item.jid} -- #{item.jid} (#{item.type})"
+        end
+
+        groups.each do |group|
+          puts "==== #{group} === "
+          items = roster.select{|i| i.groups.include?(group)}
+          items.each do |item|
+            puts "#{item.jid} -- #{item.name} (#{item.type})"
+          end
+        end
+      end
+    when 'unsubscribe', 'unsubscribe-from'
+      lambda do |client|
+        puts "unsubscribing from: #{param}"
+        client.entity(param).unsubscribe
+        client.entity(param).remove_from_roster
+      end
+    when 'subscribe', 'subscribe-to'
+      lambda do |client|
+        puts "subscribing to: #{param}"
+        client.entity(param).subscribe
+        client.entity(param).add_to_roster
+      end
+    when 'psubscriptions'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "=== PubSub Subscriptions on #{jid} ==="
+        ctx = client.entity(jid).pubsub(node).subscriptions
+        ctx.bit!(:pubsub).subscriptions.each do |s|
+          puts "#{s.node} -- #{s.subscription} (#{s.sub_id})"
+        end
+      end
+    when 'paffiliations'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "=== PubSub Subscriptions on #{jid} ==="
+        ctx = client.entity(jid).pubsub(node).affiliations
+        ctx.bit!(:pubsub).affiliations.each do |s|
+          puts "#{s.node} (#{s.affiliation})"
+        end
+      end
+    when 'psubscribe'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "subscribing to PubSub: #{jid} (#{node})"
+        client.entity(jid).pubsub(node).subscribe
+      end
+    when 'punsubscribe'
+      jid,node,subid = param.split(':',3)
+      lambda do |client|
+        puts "unsubscribing from PubSub: #{jid} (#{node}:#{subid})"
+        client.entity(jid).pubsub(node).unsubscribe(subid)
+      end
+    when 'pitems'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "request items from PubSub: #{jid} (#{node})"
+        client.entity(jid).pubsub(node).items
+      end
+    when 'publish'
+      jid,node,payload = param.split(':',3)
+      payload ||= "empty-payload"
+      lambda do |client|
+        puts "publishing #{payload.size} bytes to #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).publish(payload)
+        ctx.bit!(:pubsub).items.each do |item|
+          puts "published: #{item.id} at #{item.node}"
+        end
+      end
+    when 'join-muc'
+      muc,nick = param.split(':',2)
+      lambda do |client|
+        puts "joining MUC: #{muc} as #{nick}"
+        client.entity(muc).muc.join(nick)
+      end
+    when 'leave-muc', 'part'
+      muc,nick = param.split(':',2)
+      lambda do |client|
+        puts "leaving MUC: #{muc}"
+        client.entity(muc).muc.part(nick)
+      end
+    when 'invite-to-muc'
+      muc,nick = param.split(':',2)
+      lambda do |client|
+        puts "inviting #{nick} to #{muc}"
+        client.entity(muc).muc.invite(nick)
+      end
+    when 'say', 'tell', 'message', 'msg'
+      dst,msg = param.split(':',2)
+      lambda do |client|
+        puts "speaking to: #{dst}"
+        client.entity(dst).say(msg)
+      end
+    when 'gsay', 'gtell', 'gmsg'
+      dst,msg = param.split(':',2)
+      lambda do |client|
+        puts "speaking in MUC: #{dst}"
+        client.entity(dst).muc.say(msg)
+      end
+    when 'motd','subject'
+      dst,msg = param.split(':',2)
+      lambda do |client|
+        puts "setting motd of: #{dst}"
+        client.entity(dst).muc.motd(msg)
+      end
+    when 'nickname','nick'
+      dst,name = param.split(':',2)
+      lambda do |client|
+        puts "using nickname: #{dst}"
+        client.entity(dst).muc.change_nick(name)
+      end
+    when 'kick'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "kicking #{user}"
+        client.entity(dst).muc.kick(user)
+      end
+    when 'ban'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "banning #{user}"
+        client.entity(dst).muc.ban(user)
+      end
+    when 'unban'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "unbanning #{user}"
+        client.entity(dst).muc.unban(user)
+      end
+    when 'moderator'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "moddeerating #{user}"
+        client.entity(dst).muc.moderator(user)
+      end
+    when 'unmoderator'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "unmoderating #{user}"
+        client.entity(dst).muc.unmoderator(user)
+      end
+    when 'admin'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "admin #{user}"
+        client.entity(dst).muc.admin(user)
+      end
+    when 'unadmin'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "unadmin #{user}"
+        client.entity(dst).muc.unadmin(user)
+      end
+    when 'owner'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "new owner #{user}"
+        client.entity(dst).muc.owner(user)
+      end
+    when 'unowner'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "remove owner #{user}"
+        client.entity(dst).muc.unowner(user)
+      end
+    when 'voice'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "voicing #{user}"
+        client.entity(dst).muc.voice(user)
+      end
+    when 'unvoice'
+      dst,user = param.split(':',2)
+      lambda do |client|
+        puts "unvoicing #{user}"
+        client.entity(dst).muc.unvoice(user)
+      end
+    when 'disco-infos','infos'
+      dst,node = param.split(':',2)
+      lambda do |client|
+        puts "discovering infos for: #{dst} (node:#{node})"
+        disco = client.entity(dst).discover_infos(node)
+
+        puts "=== Identities ==="
+        disco.bit!(:discoinfos).identities.each do |i|
+          puts "#{i.category}/#{i.type}: #{i.name}"
+        end
+        puts "=== Features ==="
+        disco.bit!(:discoinfos).features.each do |f|
+          puts "#{f.var}"
+        end
+      end
+    when 'disco-items','items'
+      dst,node = param.split(':',2)
+      lambda do |client|
+        puts "discovering items for: #{dst} (node:#{node})"
+        disco = client.entity(dst).discover_items(node)
+
+        puts "=== Items ==="
+        disco.bit!(:discoitems).items.each do |i|
+          puts "#{i.entity} (#{i.node}) -- #{i.name || i.entity}"
+        end
+      end
+    else
+      raise CommandParseError, "doesn't know such command: #{cmd}"
+    end
+  end
+
+end
+
+commands = ARGV[2 .. -1]
+
+module RosterClient
+  include EM::Xmpp::Helpers
+  attr_reader :queue
+
+  def stanza_end(node)
+    puts node
+    super
+  end
+
+  def ready
+    puts "***** #{@jid} ready"
+    user_data.each{|c| handle_command c}
+    EM.open_keyboard Kb, self
+  end
+
+  def handle_command(str)
+    begin
+      Command.for(str).call self
+    rescue CommandParseError
+      puts "could not parse #{str}"
+    end
+  end
+
+  def quit
+    close_xml_stream
+    close_connection
+  end
+
+  def unbind
+    EM.stop
+  end
+end
+
+class Kb < EM::Connection
+  include EM::Protocols::LineText2
+  def initialize(client)
+    @client = client
+  end
+  def receive_line line
+    Fiber.new { @client.handle_command line unless line.empty?}.resume
+  end
+end
+
+EM.run do
+  EM::Xmpp::Connection.start(jid, pass, RosterClient, {:data => commands})
+  puts "***** connecting as #{jid}"
+end
