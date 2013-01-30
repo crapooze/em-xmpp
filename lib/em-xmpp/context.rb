@@ -296,6 +296,8 @@ module EM::Xmpp
               name  = read_attr(x, 'name')
               Identity.new name, cat, type
             end
+          else 
+            []
           end
         end
         def features
