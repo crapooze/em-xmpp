@@ -5,7 +5,8 @@ module EM::Xmpp
     def self.parse(str)
       s1,s2 = str.split('@',2)
       if s2.nil?
-        self.new(nil, s1, nil)
+        s1,s3 = s1.split('/',2)
+        self.new(nil, s1, s3)
       else
         s2,s3 = s2.split('/',2)
         self.new(s1,s2,s3)
