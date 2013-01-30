@@ -749,7 +749,7 @@ end
       end
 
       module Mucuser
-        def x_nodstreaminitiation
+        def x_node
           xpath('//xmlns:x',{'xmlns' => EM::Xmpp::Namespaces::MucUser}).first
         end
 

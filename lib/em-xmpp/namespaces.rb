@@ -41,8 +41,12 @@ module EM::Xmpp
     DataForms  = 'jabber:x:data'
     #Pubsub
     PubSub = 'http://jabber.org/protocol/pubsub'
+    #Multi user chat
+    Muc     = 'http://jabber.org/protocol/muc'
     #Multi user chat - simple user
     MucUser = 'http://jabber.org/protocol/muc#user'
+    #Multi user chat - admin
+    MucAdmin = 'http://jabber.org/protocol/muc#admin'
     #Multi user chat - owner
     MucOwner = 'http://jabber.org/protocol/muc#owner'
     #Multi user chat - roomconfig
