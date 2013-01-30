@@ -232,6 +232,12 @@ argument of send_stanza.
 This library provides helpers to add/remove entities from your roster as well
 as helpers to get the roster as a list of contacts.
 
+### Muc
+Medium support to join/leave/invite/kick/ban/voice/unvoice/chat with people in MUC rooms.
+
+### PubSub
+Basic support to subscribe/unsubscribe/publish/receive items.
+
 ## Missing
 
 * anonymous login
