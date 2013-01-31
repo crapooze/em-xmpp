@@ -19,6 +19,34 @@ class CommandParseError < ArgumentError
 end
 
 module Command extend self
+
+  def parse_formdata(allfields)
+    allfields.split('|').map do |onefield|
+      var,type,*values = onefield.split('%')
+      EM::Xmpp::Context::Contexts::Dataforms::Field.new(var,type,nil,values)
+    end
+  end
+
+  def print_dataform(ctx)
+    df = ctx.bit!(:dataforms)
+    df.x_forms.each do |form|
+      form.fields.each_with_index do |field,fidx|
+        puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
+        letter = 'a'
+        field.options.each do |opt| 
+          puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+          letter = letter.succ
+        end
+        puts "Currently:"
+        field.values.each do |val| 
+          puts "#{val}"
+          letter = letter.succ
+        end
+      end
+    end
+  end
+
+
   def for(str)
     cmd,param = str.split(':',2)
     case cmd
@@ -26,11 +54,16 @@ module Command extend self
       lambda do |client|
         client.quit
       end
+    when 'set'
+      key,val = param.split(':', 2)
+      lambda do |client|
+        client.set(key,val)
+      end
     when 'roster','list-roster','show-roster'
       lambda do |client|
         roster = client.get_roster
-        puts "buddy list"
-        groups = roster.map(&:groups).flatten
+        puts "Buddy list:"
+        groups = roster.map(&:groups).flatten.uniq
         puts "==== No Group ==="
         items = roster.select{|i| i.groups.empty?}
         items.each do |item|
@@ -56,6 +89,11 @@ module Command extend self
         puts "subscribing to: #{param}"
         client.entity(param).subscribe
         client.entity(param).add_to_roster
+      end
+    when 'subscribed', 'accept-subscription-from'
+      lambda do |client|
+        puts "accept subscription from: #{param}"
+        client.entity(param).accept_subscription
       end
     when 'psubscriptions'
       jid,node = param.split(':',2)
@@ -86,6 +124,21 @@ module Command extend self
       lambda do |client|
         puts "unsubscribing from PubSub: #{jid} (#{node}:#{subid})"
         client.entity(jid).pubsub(node).unsubscribe(subid)
+      end
+    when 'poptions'
+      jid,node,subid = param.split(':',3)
+      lambda do |client|
+        puts "listing options of: #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).options(subid)
+        puts "=== PubSub options form ==="
+        Command.print_dataform ctx
+      end
+    when 'psetoptions'
+      jid,node,formdata = param.split(':',3)
+      lambda do |client|
+        fields = Command.parse_formdata formdata
+        form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+        ctx = client.entity(jid).pubsub(node).set_options(form)
       end
     when 'pitems'
       jid,node = param.split(':',2)
@@ -219,7 +272,7 @@ module Command extend self
 
         puts "=== Identities ==="
         disco.bit!(:discoinfos).identities.each do |i|
-          puts "#{i.category}/#{i.type}: #{i.name}"
+          puts "#{i.category}/#{i.type}: #{i.name || "_"}"
         end
         puts "=== Features ==="
         disco.bit!(:discoinfos).features.each do |f|
@@ -241,7 +294,6 @@ module Command extend self
       raise CommandParseError, "doesn't know such command: #{cmd}"
     end
   end
-
 end
 
 commands = ARGV[2 .. -1]
@@ -250,15 +302,50 @@ module RosterClient
   include EM::Xmpp::Helpers
   attr_reader :queue
 
-  def stanza_end(node)
-    puts node
-    super
-  end
-
   def ready
+    @show_xml = false
     puts "***** #{@jid} ready"
     user_data.each{|c| handle_command c}
     EM.open_keyboard Kb, self
+
+
+    # Signal presence subscriptions
+    on_presence do |ctx|
+      pre = ctx.bit!(:presence)
+      if pre.subscription_request?
+        puts "=== Presence subscription request from: #{pre.from.bare}"
+        ctx.done!
+      end
+      ctx
+    end
+
+    # Signal people arriving and leaving
+    on_presence do |ctx|
+      pre = ctx.bit!(:presence)
+      puts "=== Presence #{pre.from}: #{pre.type}"
+      ctx.done!
+    end
+
+    # Acknowledge roster change 
+    on_iq do |ctx|
+      roster = ctx.bit(:roster)
+      if roster
+        if roster.type == 'set'
+          puts "=== Roster change ==="
+          roster.items.each do |item|
+            puts "#{item.name||item.jid} -- #{item.jid} (#{item.type})"
+          end
+          send_stanza roster.reply
+          ctx.done!
+        end
+      end
+      ctx
+    end
+  end
+
+  def stanza_end(stanza)
+    puts stanza if @show_xml
+    super
   end
 
   def handle_command(str)
@@ -272,6 +359,20 @@ module RosterClient
   def quit
     close_xml_stream
     close_connection
+  end
+
+  def set(key,val)
+    case key
+    when '+xml'
+      @show_xml = true
+    when '-xml'
+      @show_xml = false
+    when '+debug'
+      @show_xml = false
+      $DEBUG = true
+    when '-debug'
+      $DEBUG = false
+    end
   end
 
   def unbind
