@@ -14,30 +14,53 @@ module EM::Xmpp
       yield self if block_given?
     end
 
+    # returns the domain entity of this entity
     def domain
       Entity.new(connection, jid.domain)
     end
 
+    # returns the bare entity of this entity
     def bare
       Entity.new(connection, jid.bare)
     end
 
+    # returns the full jid of this entity
     def full
       jid.full
     end
 
+    # to_s is defined as the jid.to_s
+    # so that you can just pass the entity when building stanzas
+    # to refer to the entity (e.g., message_stanza('to' => some_entity) )
     def to_s
       jid.to_s
     end
 
+    # sends a subscription request to the bare entity
     def subscribe(&blk)
       pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'subscribe')
       connection.send_stanza pres, &blk
     end
 
+    # send a subscription stanza to accept an incoming subscription request
+    def accept_subscription(&blk)
+      pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'subscribed')
+      connection.send_stanza pres, &blk
+    end
+
+    # unsubscribes from from the bare entity
     def unsubscribe(&blk)
       pres = connection.presence_stanza('to'=>jid.bare, 'type' => 'unsubscribe')
       connection.send_stanza pres, &blk
+    end
+
+    # sends some plain message to the entity (use type = 'chat')
+    def say(body, type='chat', xmlproc=nil, &blk)
+      msg = connection.message_stanza(:to => jid, :type => type) do |xml|
+        xml.body body
+        xmlproc.call xml if xmlproc
+      end
+      connection.send_stanza msg, &blk
     end
 
     private
@@ -52,6 +75,11 @@ module EM::Xmpp
 
     public
 
+    # add the entity (bare) to the roster
+    # optional parameters can set the display name (or friendly name)
+    # for the roster entity
+    #
+    # similarly, you can attach the entity to one or multiple groups
     def add_to_roster(display_name=nil,groups=[])
       item_fields = {:jid => jid.bare}
       item_fields[:name] = display_name if display_name
@@ -68,6 +96,7 @@ module EM::Xmpp
       send_iq_stanza_fibered query
     end
 
+    # removes an entity (bare) from the roster
     def remove_from_roster
       item_fields = {:jid => jid.bare, :subscription => 'remove'}
 
@@ -80,6 +109,8 @@ module EM::Xmpp
       send_iq_stanza_fibered query
     end
 
+    # discovers infos (disco#infos) about an entity
+    # can optionally specify a node of the entity
     def discover_infos(node=nil)
       hash = {'xmlns' => Namespaces::DiscoverInfos}
       hash['node'] = node if node
@@ -89,6 +120,8 @@ module EM::Xmpp
       send_iq_stanza_fibered iq
     end
 
+    # discovers items (disco#items) of an entity
+    # can optionally specify a node to discover
     def discover_items(node=nil)
       iq = connection.iq_stanza('to'=>jid.to_s) do |xml|
         xml.query('xmlns' => Namespaces::DiscoverItems)
@@ -96,6 +129,8 @@ module EM::Xmpp
       send_iq_stanza_fibered iq
     end
 
+    # returns a PubSub entity with same bare jid
+    # accepts an optional node-id
     def pubsub(nid=nil)
       node_jid = if nid
                    JID.new(jid.node, jid.domain, nid)
@@ -106,14 +141,18 @@ module EM::Xmpp
     end
 
     class PubSub < Entity
+      # returns the pubsub entity for a specific node_id of this entity
       def node(node_id)
         pubsub(node_id)
       end
 
+      # returns the node_id of this pubsub entity
       def node_id
         jid.resource
       end
 
+      # requests the list of subscriptions for this pubsub entity
+      # returns the iq context for the answer
       def subscriptions
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -123,6 +162,8 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
+      # requests the list of affiliations for this pubsub entity
+      # returns the iq context for the answer
       def affiliations
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -132,41 +173,79 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
-      def subscribe(subscribed_node_id=nil)
-        subscribed_node_id ||= node_id
-        subscribee = connection.jid.bare
-
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.subscribe('node' => subscribed_node_id, 'jid'=>subscribee)
-          end
-        end
-
-        send_iq_stanza_fibered iq
-      end
-
-      def unsubscribe(subscription_id=nil,subscribed_node_id=nil)
+      # list the subscribe-node options
+      # returns the iq context for the answer
+      def options(subscription_id=nil)
         params = {}
         params['subid'] = subscription_id if subscription_id
-        subscribed_node_id ||= node_id
         subscribee = connection.jid.bare
 
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'get') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.unsubscribe({'node' => subscribed_node_id, 'jid'=>subscribee}.merge(params))
+            sub.options({'node' => node_id, 'jid'=>subscribee}.merge(params))
           end
         end
 
         send_iq_stanza_fibered iq
       end
 
-      def items(max_items=nil,item_ids=nil,node=nil)
-        node ||= node_id
+      def set_options(form)
+        subscribee = connection.jid.bare
+
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
+            sub.options({'node' => node_id, 'jid'=>subscribee}) do |options|
+              connection.build_submit_form(options,form)
+            end
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # subscribe to this entity
+      # returns the iq context for the answer
+      def subscribe
+        subscribee = connection.jid.bare
+
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
+            sub.subscribe('node' => node_id, 'jid'=>subscribee)
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # unsubscribes from this entity. 
+      # One must provide a subscription-id if there
+      # are multiple subscriptions to this node.
+      # returns the iq context for the answer
+      def unsubscribe(subscription_id=nil)
+        params = {}
+        params['subid'] = subscription_id if subscription_id
+        subscribee = connection.jid.bare
+
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
+            sub.unsubscribe({'node' => node_id, 'jid'=>subscribee}.merge(params))
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # list items of this pubsub node
+      # max_items is the maximum number of answers to return in the answer
+      # item_ids is the list of IDs to select from the pubsub node
+      #
+      # returns the iq context for the answer
+      def items(max_items=nil,item_ids=nil)
         params = {}
         params['max_items'] = max_items if max_items
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |retrieve|
-            retrieve.items({'node' => subscribed_node_id}.merge(params)) do |items|
+            retrieve.items({'node' => node_id}.merge(params)) do |items|
               if item_ids.respond_to?(:each)
                 item_ids.each do |item_id|
                   items('id' => item_id)
@@ -179,13 +258,23 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
-      def publish(item_payload,node=nil,item_id=nil)
-        node ||= node_id
+      # publishes a payload to the pubsub node
+      # if the item_payload responds to :call (e.g., a proc)
+      # then the item_payload will receive :call method with, as unique parameter,
+      # the xml node of the xml builder. this method call should append an entry
+      # node with the payload
+      # otherwise it is just serialized in an entry node
+      #
+      # item_id is an optional ID to identify the payload, otherwise, the
+      # pubsub service will attribute an ID
+      #
+      # returns the iq context for the answer
+      def publish(item_payload,item_id=nil)
         params = {}
         params['id'] = item_id if item_id
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.publish(:node => node) do |publish|
+            pubsub.publish(:node => node_id) do |publish|
               if item_payload.respond_to?(:call)
                 publish.item(params) { |payload| item_payload.call payload }
               else
@@ -263,7 +352,7 @@ module EM::Xmpp
             end
           end
         end
-        connection.send_stanza iq, &blk
+        send_iq_stanza_fibered iq
       end
 
       def set_affiliation(affiliation,affiliated_jid,reason=nil,&blk)
@@ -274,7 +363,7 @@ module EM::Xmpp
             end
           end
         end
-        connection.send_stanza iq, &blk
+        send_iq_stanza_fibered iq
       end
 
       public
@@ -344,9 +433,8 @@ module EM::Xmpp
         set_affiliation 'member', jid, reason, &blk
       end
 
-      #TODO: understand what needs jid and what needs nickname
-
-      #      get configure form
+      #TODO: 
+      #      get configure-form
       #      configure max users
       #      configure as reserved
       #      configure public jids

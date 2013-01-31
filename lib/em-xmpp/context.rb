@@ -376,7 +376,7 @@ module EM::Xmpp
 
                 Option.new(opt_label, opt_value)
               end
-              value_nodes = field.xpath('.//xmlns:value',{'xmlns' => Namespaces::DataForms})
+              value_nodes = field.xpath('./xmlns:value',{'xmlns' => Namespaces::DataForms})
               values = value_nodes.map(&:content)
 
               Field.new(var,type,label,values,options)
