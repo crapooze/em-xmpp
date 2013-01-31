@@ -349,11 +349,12 @@ module EM::Xmpp
 
       module Dataforms
         Form  = Struct.new(:type, :fields)
-        Field = Struct.new(:var, :type, :values) do
+        Field = Struct.new(:var, :type, :label, :values, :options) do
           def value
             values.first
           end
         end
+        Option = Struct.new(:label, :value)
 
         def x_form_nodes
           xpath('//xmlns:x',{'xmlns' => Namespaces::DataForms})
@@ -366,10 +367,19 @@ module EM::Xmpp
             fields = field_nodes.map do |field|
               var  = read_attr(field, 'var')
               type = read_attr(field, 'type')
-              value_nodes = field.xpath('//xmlns:value',{'xmlns' => Namespaces::DataForms})
+              label = read_attr(field, 'label')
+              option_nodes = field.xpath('.//xmlns:option',{'xmlns' => Namespaces::DataForms})
+              options = option_nodes.map do |opt|
+                opt_label = read_attr(opt, 'label')
+                opt_value_nodes = opt.xpath('.//xmlns:value',{'xmlns' => Namespaces::DataForms})
+                opt_value = opt_value_nodes.map(&:content).first
+
+                Option.new(opt_label, opt_value)
+              end
+              value_nodes = field.xpath('.//xmlns:value',{'xmlns' => Namespaces::DataForms})
               values = value_nodes.map(&:content)
 
-              Field.new(var,type,values)
+              Field.new(var,type,label,values,options)
             end
             Form.new form_type, fields
           end
@@ -390,6 +400,7 @@ module EM::Xmpp
       end
 
       module Roster
+        include Contexts::Iq
         def query_node
           xpath('//xmlns:query',{'xmlns' => EM::Xmpp::Namespaces::Roster}).first
         end
