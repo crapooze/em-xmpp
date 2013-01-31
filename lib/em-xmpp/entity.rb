@@ -151,9 +151,9 @@ module EM::Xmpp
         jid.resource
       end
 
-      # requests the list of subscriptions for this pubsub entity
+      # requests the list of subscriptions on this PubSub service
       # returns the iq context for the answer
-      def subscriptions
+      def service_subscriptions
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
             pubsub.subscriptions
@@ -162,9 +162,9 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
-      # requests the list of affiliations for this pubsub entity
+      # requests the list of affiliations for this PubSub service
       # returns the iq context for the answer
-      def affiliations
+      def service_affiliations
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
             pubsub.affiliations
@@ -173,9 +173,9 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
-      # list the subscribe-node options
+      # list the subscription on that node
       # returns the iq context for the answer
-      def options(subscription_id=nil)
+      def subscription_options(subscription_id=nil)
         params = {}
         params['subid'] = subscription_id if subscription_id
         subscribee = connection.jid.bare
@@ -192,7 +192,7 @@ module EM::Xmpp
       # sets configuration options on this entity
       # uses a DataForms form
       # returns the iq context for the answer
-      def configure(form)
+      def configure_subscription(form)
         subscribee = connection.jid.bare
 
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
@@ -208,7 +208,7 @@ module EM::Xmpp
 
       # retrieve default configuration of this entity
       # returns the iq context for the answer
-      def default_configuration
+      def default_subscription_configuration
         subscribee = connection.jid.bare
         args = {'node' => node_id} if node_id
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'get') do |xml|
@@ -325,6 +325,191 @@ module EM::Xmpp
 
         send_iq_stanza_fibered iq
       end
+
+      # Retracts an item on a PubSub node given it's item_id.
+      #
+      # returns the iq context for the answer
+      def retract(item_id=nil)
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
+            pubsub.retract(:node => node_id) do |retract|
+              retract.item(:id => item_id) 
+            end
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # Creates the PubSub node.
+      #
+      # returns the iq context for the answer
+      def create
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
+            pubsub.create(:node => node_id)
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+
+      # Purges the PubSub node.
+      #
+      # returns the iq context for the answer
+      def purge
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
+            pubsub.purge(:node => node_id)
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # requests the list of subscriptions on this pubsub node (for the owner)
+      # returns the iq context for the answer
+      def subscriptions
+        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
+            pubsub.subscriptions(:node => node_id)
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      # requests the list of affiliations on this pubsub node (for the owner)
+      # returns the iq context for the answer
+      def affiliations
+        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
+            pubsub.affiliations(:node => node_id)
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      # changes the subscription status of a pubsub node (for the owner)
+      # returns the iq context for the answer
+      def modify_subscriptions(subs)
+        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
+            pubsub.subscriptions(:node => node_id) do |node|
+              subs.each do  |s|
+                node.subscription(:jid => s.jid, :subscription => s.subscription)
+              end
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      # changes the affiliation status of a pubsub node (for the owner)
+      # returns the iq context for the answer
+      def modify_affiliations(affs)
+        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
+            pubsub.affiliations(:node => node_id) do |node|
+              affs.each do  |s|
+                node.affiliation(:jid => s.jid, :affiliation => s.affiliation)
+              end
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      # deletes the subscription of one or multiple subscribees of a pubsub node (for the owner)
+      # returns the iq context for the answer
+      def delete_subscriptions(jids)
+        jids = [jids].flatten
+        subs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubSub::Subscription.new(jid, nil, 'none', nil)}
+        modify_subscriptions subs
+      end
+
+      # deletes the affiliation of one or multiple subscribees of a pubsub node (for the owner)
+      # returns the iq context for the answer
+      def delete_affiliations(jids)
+        jids = [jids].flatten
+        affs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubSub::Affiliation.new(jid, 'none')}
+        modify_affiliations affs
+      end
+
+      # Deletes the PubSub node.
+      # Optionnaly redirects the node.
+      #
+      # returns the iq context for the answer
+      def delete(redirect_uri=nil)
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
+            pubsub.delete(:node => node_id) do |del|
+              del.redirect(:uri => redirect_uri) if redirect_uri
+            end
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # Creates the PubSub node with a non-default configuration.
+      #
+      # returns the iq context for the answer
+      def create_and_configure(form)
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |node|
+            node.create('node' => node_id)
+            node.configure do |options|
+              connection.build_submit_form(options,form)
+            end
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+
+      # requests the node configuration (for owners)
+      #
+      # returns the iq context for the answer
+      def configuration_options
+        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
+            node.configure('node' => node_id)
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # configures the node (for owners)
+      #
+      # returns the iq context for the answer
+      def configure(form)
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
+            node.configure('node' => node_id) do |config|
+              connection.build_submit_form(config,form)
+            end
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # retrieve default configuration of this pubsub service
+      #
+      # returns the iq context for the answer
+      def default_configuration
+        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |sub|
+            sub.default
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
 
     end
 

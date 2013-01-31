@@ -41,6 +41,14 @@ module EM::Xmpp
     DataForms  = 'jabber:x:data'
     #Pubsub
     PubSub = 'http://jabber.org/protocol/pubsub'
+    #Pubsub#owner
+    PubSubOwner = 'http://jabber.org/protocol/pubsub#owner'
+    #Pubsub#subscribe-authorization
+    PubSubSubscribeAuthorization = 'http://jabber.org/protocol/pubsub#subscribe_authorization'
+    #Pubsub#get-pending
+    PubSubGetPending = 'http://jabber.org/protocol/pubsub#get-pending'
+    #Pubsub#event
+    PubSubEvent = 'http://jabber.org/protocol/pubsub#event'
     #Multi user chat
     Muc     = 'http://jabber.org/protocol/muc'
     #Multi user chat - simple user

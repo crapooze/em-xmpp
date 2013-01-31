@@ -687,11 +687,16 @@ end
         end
       end
 
-      module Pubsub
+      module PubsubMain
+        include IncomingStanza
         #TODO:result-set
         Subscription = Struct.new(:jid, :node, :subscription, :sub_id)
-        Affiliation  = Struct.new(:node, :affiliation)
+        Affiliation  = Struct.new(:jid, :node, :affiliation)
         Item         = Struct.new(:node, :id, :payload)
+      end
+
+      module Pubsub
+        include PubsubMain
         def pubsub_node
           xpath('//xmlns:pubsub',{'xmlns' => EM::Xmpp::Namespaces::PubSub}).first
         end
@@ -731,7 +736,7 @@ end
             node.xpath('//xmlns:affiliation',{'xmlns' => EM::Xmpp::Namespaces::PubSub}).map do |n|
               node_id = read_attr n, 'node'
               aff     = read_attr(n,'affiliation')
-              Affiliation.new(node_id,aff)
+              Affiliation.new(to,node_id,aff)
             end
           else
             []
@@ -752,6 +757,69 @@ end
             node.xpath('//xmlns:item',{'xmlns' => EM::Xmpp::Namespaces::PubSub}).map do |n|
               item_id = read_attr n, 'id'
               Item.new(item_node,item_id,n.children.first)
+            end
+          else
+            []
+          end
+        end
+
+        def creation_node
+          n = pubsub_node
+          if n
+            n.xpath('//xmlns:create',{'xmlns' => EM::Xmpp::Namespaces::PubSub}).first
+          end
+        end
+
+        def created_node
+          n = creation_node
+          read_attr(n, 'node') if n
+        end
+      end
+
+
+      module Pubsubowner
+        include PubsubMain
+        def pubsub_node
+          xpath('//xmlns:pubsub',{'xmlns' => EM::Xmpp::Namespaces::PubSubOwner}).first
+        end
+        def publish_node
+          xpath('//xmlns:publish',{'xmlns' => EM::Xmpp::Namespaces::PubSubOwner}).first
+        end
+        def subscriptions_container_node
+          n = pubsub_node
+          if n
+            n.xpath('//xmlns:subscriptions',{'xmlns' => EM::Xmpp::Namespaces::PubSubOwner}).first
+          end
+        end
+        def subscriptions
+          node = subscriptions_container_node
+          node_id = read_attr node, 'node'
+          if node
+            node.xpath('//xmlns:subscription',{'xmlns' => EM::Xmpp::Namespaces::PubSubOwner}).map do |n|
+              jid     = read_attr(n,'jid') {|x| connection.entity x}
+              sub     = read_attr(n,'subscription')
+              sub_id  = read_attr(n,'subid')
+              Subscription.new(jid,node_id,sub,sub_id)
+            end
+          else
+            []
+          end
+        end
+
+        def affiliations_container_node
+          n = pubsub_node
+          if n
+            n.xpath('//xmlns:affiliations',{'xmlns' => EM::Xmpp::Namespaces::PubSubOwner}).first
+          end
+        end
+        def affiliations
+          node = affiliations_container_node
+          if node
+            node_id = read_attr(node, 'node')
+            node.xpath('//xmlns:affiliation',{'xmlns' => EM::Xmpp::Namespaces::PubSubOwner}).map do |n|
+              jid = read_attr(n, 'jid') {|x| connection.entity x}
+              aff = read_attr(n,'affiliation')
+              Affiliation.new(jid,node_id,aff)
             end
           else
             []
@@ -884,6 +952,9 @@ end
       end
       class Pubsub < Bit
         include Contexts::Pubsub
+      end
+      class Pubsubowner < Bit
+        include Contexts::Pubsubowner
       end
       class Mucuser < Bit
         include Contexts::Mucuser

@@ -50,15 +50,18 @@ module Command extend self
   def for(str)
     cmd,param = str.split(':',2)
     case cmd
+
     when 'quit'
       lambda do |client|
         client.quit
       end
+
     when 'set'
       key,val = param.split(':', 2)
       lambda do |client|
         client.set(key,val)
       end
+
     when 'roster','list-roster','show-roster'
       lambda do |client|
         roster = client.get_roster
@@ -78,84 +81,95 @@ module Command extend self
           end
         end
       end
+
     when 'unsubscribe', 'unsubscribe-from'
       lambda do |client|
         puts "unsubscribing from: #{param}"
         client.entity(param).unsubscribe
         client.entity(param).remove_from_roster
       end
+
     when 'subscribe', 'subscribe-to'
       lambda do |client|
         puts "subscribing to: #{param}"
         client.entity(param).subscribe
         client.entity(param).add_to_roster
       end
+
     when 'subscribed', 'accept-subscription-from'
       lambda do |client|
         puts "accept subscription from: #{param}"
         client.entity(param).accept_subscription
       end
-    when 'psubscriptions'
+
+      ### PUBSUB
+      ###### Service user
+
+    when 'pubsub-service-subscriptions'
       jid,node = param.split(':',2)
       lambda do |client|
-        puts "=== PubSub Subscriptions on #{jid} ==="
-        ctx = client.entity(jid).pubsub(node).subscriptions
+        puts "=== PubSub Subscriptions on #{jid} (#{node}) ==="
+        ctx = client.entity(jid).pubsub(node).service_subscriptions
         ctx.bit!(:pubsub).subscriptions.each do |s|
           puts "#{s.node} -- #{s.subscription} (#{s.sub_id})"
         end
       end
-    when 'paffiliations'
+    when 'pubsub-service-affiliations'
       jid,node = param.split(':',2)
       lambda do |client|
-        puts "=== PubSub Subscriptions on #{jid} ==="
-        ctx = client.entity(jid).pubsub(node).affiliations
+        puts "=== PubSub Affiliations on #{jid} (#{node}) ==="
+        ctx = client.entity(jid).pubsub(node).service_affiliations
         ctx.bit!(:pubsub).affiliations.each do |s|
           puts "#{s.node} (#{s.affiliation})"
         end
       end
-    when 'psubscribe'
+    when 'psubscribe','pubsub-subscribe'
       jid,node = param.split(':',2)
       lambda do |client|
         puts "subscribing to PubSub: #{jid} (#{node})"
         client.entity(jid).pubsub(node).subscribe
       end
-    when 'punsubscribe'
+    when 'punsubscribe','pubsub-unsubscribe'
       jid,node,subid = param.split(':',3)
       lambda do |client|
         puts "unsubscribing from PubSub: #{jid} (#{node}:#{subid})"
         client.entity(jid).pubsub(node).unsubscribe(subid)
       end
-    when 'poptions'
+    when 'subscription-options'
       jid,node,subid = param.split(':',3)
       lambda do |client|
-        puts "listing options of: #{jid} (#{node})"
-        ctx = client.entity(jid).pubsub(node).options(subid)
-        puts "=== PubSub options form ==="
+        puts "listing options of subscription on: #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).subscription_options(subid)
+        puts "=== PubSub subscription options form ==="
         Command.print_dataform ctx
       end
-    when 'pdefault-options'
+    when 'default-subscription-options'
       jid,node = param.split(':',2)
       lambda do |client|
-        puts "listing default options of: #{jid} (#{node})"
+        puts "listing default subscription options of: #{jid} (#{node})"
         entity = client.entity(jid).pubsub
         entity = entity.node(node) if node
-        ctx = entity.default_configuration
-        puts "=== PubSub default options ==="
+        ctx = entity.default_subscription_configuration
+        puts "=== PubSub default subscription options ==="
         Command.print_dataform ctx
       end
-    when 'pconfigure'
+    when 'pubsub-configure-subscription'
       jid,node,formdata = param.split(':',3)
       lambda do |client|
         fields = Command.parse_formdata formdata
         form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
-        ctx = client.entity(jid).pubsub(node).set_options(form)
+        puts "configuring #{fields.size} fields of subscription: #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).configure_subscription(form)
       end
-    when 'pitems'
+    when 'pubsub-items'
       jid,node = param.split(':',2)
       lambda do |client|
         puts "request items from PubSub: #{jid} (#{node})"
         client.entity(jid).pubsub(node).items
       end
+
+      ###### Node owner
+
     when 'publish'
       jid,node,payload = param.split(':',3)
       payload ||= "empty-payload"
@@ -166,114 +180,186 @@ module Command extend self
           puts "published: #{item.id} at #{item.node}"
         end
       end
+    when 'retract'
+      jid,node,item_id = param.split(':',3)
+      lambda do |client|
+        puts "retracting #{item_id} from #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).retract(item_id)
+      end
+    when 'create'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "creating PubSub node: #{jid} (#{node})"
+        client.entity(jid).pubsub(node).create
+      end
+    when 'purge'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "purging PubSub node: #{jid} (#{node})"
+        client.entity(jid).pubsub(node).purge
+      end
+    when 'delete'
+      jid,node,uri = param.split(':',3)
+      lambda do |client|
+        puts "delete PubSub node: #{jid} (#{node})"
+        client.entity(jid).pubsub(node).delete(uri)
+      end
+    when 'pubsub-node-subscriptions'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "=== PubSub Subscriptions on #{jid} ==="
+        ctx = client.entity(jid).pubsub(node).subscriptions
+        ctx.bit!(:pubsubowner).subscriptions.each do |s|
+          puts "#{s.jid} -- #{s.subscription} (#{s.sub_id})"
+        end
+      end
+    when 'pubsub-node-affiliations'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "=== PubSub Affiliations on #{jid} ==="
+        ctx = client.entity(jid).pubsub(node).affiliations
+        ctx.bit!(:pubsubowner).affiliations.each do |s|
+          puts "#{s.jid} (#{s.affiliation})"
+        end
+      end
+
+    when 'pubsub-options'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "listing PubSub node configuration options: #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).configuration_options
+        puts "=== PubSub node configuration options form ==="
+        Command.print_dataform ctx
+      end
+
+      ### MUC
+
     when 'join-muc'
       muc,nick = param.split(':',2)
       lambda do |client|
         puts "joining MUC: #{muc} as #{nick}"
         client.entity(muc).muc.join(nick)
       end
+
     when 'leave-muc', 'part'
       muc,nick = param.split(':',2)
       lambda do |client|
         puts "leaving MUC: #{muc}"
         client.entity(muc).muc.part(nick)
       end
+
     when 'invite-to-muc'
       muc,nick = param.split(':',2)
       lambda do |client|
         puts "inviting #{nick} to #{muc}"
         client.entity(muc).muc.invite(nick)
       end
+
     when 'say', 'tell', 'message', 'msg'
       dst,msg = param.split(':',2)
       lambda do |client|
         puts "speaking to: #{dst}"
         client.entity(dst).say(msg)
       end
+
     when 'gsay', 'gtell', 'gmsg'
       dst,msg = param.split(':',2)
       lambda do |client|
         puts "speaking in MUC: #{dst}"
         client.entity(dst).muc.say(msg)
       end
+
     when 'motd','subject'
       dst,msg = param.split(':',2)
       lambda do |client|
         puts "setting motd of: #{dst}"
         client.entity(dst).muc.motd(msg)
       end
+
     when 'nickname','nick'
       dst,name = param.split(':',2)
       lambda do |client|
         puts "using nickname: #{dst}"
         client.entity(dst).muc.change_nick(name)
       end
+
     when 'kick'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "kicking #{user}"
         client.entity(dst).muc.kick(user)
       end
+
     when 'ban'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "banning #{user}"
         client.entity(dst).muc.ban(user)
       end
+
     when 'unban'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "unbanning #{user}"
         client.entity(dst).muc.unban(user)
       end
+
     when 'moderator'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "moddeerating #{user}"
         client.entity(dst).muc.moderator(user)
       end
+
     when 'unmoderator'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "unmoderating #{user}"
         client.entity(dst).muc.unmoderator(user)
       end
+
     when 'admin'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "admin #{user}"
         client.entity(dst).muc.admin(user)
       end
+
     when 'unadmin'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "unadmin #{user}"
         client.entity(dst).muc.unadmin(user)
       end
+
     when 'owner'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "new owner #{user}"
         client.entity(dst).muc.owner(user)
       end
+
     when 'unowner'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "remove owner #{user}"
         client.entity(dst).muc.unowner(user)
       end
+
     when 'voice'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "voicing #{user}"
         client.entity(dst).muc.voice(user)
       end
+
     when 'unvoice'
       dst,user = param.split(':',2)
       lambda do |client|
         puts "unvoicing #{user}"
         client.entity(dst).muc.unvoice(user)
       end
+     
     when 'disco-infos','infos'
       dst,node = param.split(':',2)
       lambda do |client|
@@ -289,6 +375,7 @@ module Command extend self
           puts "#{f.var}"
         end
       end
+      
     when 'disco-items','items'
       dst,node = param.split(':',2)
       lambda do |client|
