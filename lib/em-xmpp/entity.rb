@@ -189,7 +189,10 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
-      def set_options(form)
+      # sets configuration options on this entity
+      # uses a DataForms form
+      # returns the iq context for the answer
+      def configure(form)
         subscribee = connection.jid.bare
 
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
@@ -203,6 +206,21 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
+      # retrieve default configuration of this entity
+      # returns the iq context for the answer
+      def default_configuration
+        subscribee = connection.jid.bare
+        args = {'node' => node_id} if node_id
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'get') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
+            sub.default(args)
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+
       # subscribe to this entity
       # returns the iq context for the answer
       def subscribe
@@ -211,6 +229,24 @@ module EM::Xmpp
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
             sub.subscribe('node' => node_id, 'jid'=>subscribee)
+          end
+        end
+
+        send_iq_stanza_fibered iq
+      end
+
+      # subscribe and configure this entity at the same time
+      # see subscribe and configure
+      # returns the iq context for the answer
+      def subscribe_and_configure(form)
+        subscribee = connection.jid.bare
+
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
+            sub.subscribe('node' => node_id, 'jid'=>subscribee)
+            sub.options do |options|
+              connection.build_submit_form(options,form)
+            end
           end
         end
 
@@ -290,8 +326,6 @@ module EM::Xmpp
         send_iq_stanza_fibered iq
       end
 
-      #TODO: configure
-      #      subscribe_and_configure
     end
 
     # Generates a MUC entity from this entity.

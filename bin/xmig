@@ -133,7 +133,17 @@ module Command extend self
         puts "=== PubSub options form ==="
         Command.print_dataform ctx
       end
-    when 'psetoptions'
+    when 'pdefault-options'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "listing default options of: #{jid} (#{node})"
+        entity = client.entity(jid).pubsub
+        entity = entity.node(node) if node
+        ctx = entity.default_configuration
+        puts "=== PubSub default options ==="
+        Command.print_dataform ctx
+      end
+    when 'pconfigure'
       jid,node,formdata = param.split(':',3)
       lambda do |client|
         fields = Command.parse_formdata formdata
