@@ -486,6 +486,47 @@ module RosterClient
       end
       ctx
     end
+
+    # Prints Pubsub event
+    on_message do |ctx|
+      event = ctx.bit(:pubsubevent)
+      if event
+        puts "=== PubSub event #{event.service} ==="
+        event.items.each do |i|
+          puts "+item> #{i.node} #{i.item_id} (by #{i.publisher || 'N/A'})"
+          puts i.payload
+        end
+        event.retractions.each do |r|
+          puts "-item> #{r.node} #{r.item_id}"
+        end
+
+        #wrong
+        if event.purge
+          puts "node purged #{event.node_id}"
+        end
+
+        #wrong
+        if event.deletion
+          puts "node destroyed #{event.node_id}"
+        end
+
+        #tocheck
+        if event.configuration
+          cfg = event.configuration
+          puts "new node configuration for #{cfg.node}"
+          puts cfg.config
+        end
+
+        #tocheck
+        if event.subscription
+          sub = event.subscription
+          puts "subscription of #{sub.jid} (#{sub.sub_id}) status is now #{sub.subscription} for #{sub.node}"
+          puts "expires on #{sub.expiry}" if sub.expiry
+        end
+        ctx.done!
+      end
+      ctx
+    end
   end
 
   def stanza_end(stanza)

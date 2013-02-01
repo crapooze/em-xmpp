@@ -3,6 +3,7 @@ require 'em-xmpp/jid'
 require 'em-xmpp/entity'
 require 'em-xmpp/namespaces'
 require 'time'
+require 'date'
 require 'ostruct'
 
 module EM::Xmpp
@@ -557,35 +558,35 @@ module EM::Xmpp
 
       module Mood
         DefinedMoods = %w{afraid amazed angry amorous annoyed anxious aroused
-ashamed bored brave calm cautious cold confident confused contemplative
-contented cranky crazy creative curious dejected depressed disappointed
-disgusted dismayed distracted embarrassed envious excited flirtatious
-frustrated grumpy guilty happy hopeful hot humbled humiliated hungry hurt
-impressed in_awe in_love indignant interested intoxicated invincible jealous
-lonely lucky mean moody nervous neutral offended outraged playful proud relaxed
-relieved remorseful restless sad sarcastic serious shocked shy sick sleepy
-spontaneous stressed strong surprised thankful thirsty tired undefined weak
-worried}.freeze
+        ashamed bored brave calm cautious cold confident confused contemplative
+        contented cranky crazy creative curious dejected depressed disappointed
+        disgusted dismayed distracted embarrassed envious excited flirtatious
+        frustrated grumpy guilty happy hopeful hot humbled humiliated hungry hurt
+        impressed in_awe in_love indignant interested intoxicated invincible jealous
+        lonely lucky mean moody nervous neutral offended outraged playful proud relaxed
+        relieved remorseful restless sad sarcastic serious shocked shy sick sleepy
+        spontaneous stressed strong surprised thankful thirsty tired undefined weak
+        worried}.freeze
 
-def mood_node
-  xpath('//xmlns:mood',{'xmlns' => Namespaces::Mood}).first
-end
-def mood_name_node
-  n = mood_node
-  n.children.find{|c| DefinedMoods.include?(c.name)} if n
-end
-def mood_text_node
-  n = mood_node
-  n.children.find{|c| c.name == 'text'}
-end
-def mood
-  n = mood_name_node
-  n.name if n
-end
-def mood
-  n = mood_text_node
-  n.content if n
-end
+        def mood_node
+          xpath('//xmlns:mood',{'xmlns' => Namespaces::Mood}).first
+        end
+        def mood_name_node
+          n = mood_node
+          n.children.find{|c| DefinedMoods.include?(c.name)} if n
+        end
+        def mood_text_node
+          n = mood_node
+          n.children.find{|c| c.name == 'text'}
+        end
+        def mood
+          n = mood_name_node
+          n.name if n
+        end
+        def mood
+          n = mood_text_node
+          n.content if n
+        end
       end
 
       module Bytestreams
@@ -689,10 +690,123 @@ end
 
       module PubsubMain
         include IncomingStanza
-        #TODO:result-set
-        Subscription = Struct.new(:jid, :node, :subscription, :sub_id)
+        Subscription = Struct.new(:jid, :node, :subscription, :sub_id, :expiry)
         Affiliation  = Struct.new(:jid, :node, :affiliation)
-        Item         = Struct.new(:node, :id, :payload)
+        Item         = Struct.new(:node, :item_id, :payload, :publisher)
+        Retraction   = Struct.new(:node, :item_id)
+        Deletion     = Struct.new(:node, :redirect)
+        Configuration= Struct.new(:node, :config)
+        Purge        = Struct.new(:node)
+      end
+
+      module Pubsubevent
+        include PubsubMain
+        def service
+          from.jid
+        end
+
+        def node_id
+          n = event_node
+          read_attr(n, 'node') if n
+        end
+
+        def event_node
+          xpath('//xmlns:event',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
+        end
+        def items_node
+          n = event_node
+          if n
+            n.xpath('.//xmlns:items',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
+          end
+        end
+        def items
+          node = items_node
+          node_id = read_attr(node, 'node')
+          if node
+            node.xpath(".//xmlns:item",{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).map do |n|
+              item_id = read_attr n, 'id'
+              publisher = read_attr n, 'publisher'
+              Item.new(node_id, item_id, n.children, publisher)
+            end
+          else
+            []
+          end
+        end
+        def retractions
+          node = items_node
+          node_id = read_attr(node, 'node')
+          if node
+            node.xpath(".//xmlns:retract",{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).map do |n|
+              item_id = read_attr n, 'id'
+              Retraction.new(node_id, item_id)
+            end
+          else
+            []
+          end
+        end
+
+        def purge_node
+          n = event_node
+          if n
+            p "got event node"
+            puts n
+            n.xpath('//xmlns:purge',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
+          end
+        end
+
+        def purge
+          node = purge_node
+          Purge.new(node.node_id) if node
+        end
+
+        def subscription_node
+          n = event_node
+          if n
+            n.xpath('//xmlns:subscription',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
+          end
+        end
+
+        def subscription
+          node = subscription_node
+          if node
+            node_id = read_attr(node, 'node')
+            jid = read_attr(node, 'jid') {|x| connection.entity x}
+            subscription = read_attr(node, 'subscription')
+            sub_id = read_attr(node,'subid')
+            expiry = read_attr(node,'expiry'){|x| Date.parse x}
+            Subscription.new(jid, node_id, subscription, sub_id, expiry)
+          end
+        end
+
+        def configuration_node
+          n = event_node
+          if n
+            n.xpath('//xmlns:configuration',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
+          end
+        end
+
+        def configuration
+          node = configuration_node
+          if node
+            Configuration.new(node.node_id, node.children) #TODO: maybe look for the dataform
+          end
+        end
+
+        def deletion_node
+          n = event_node
+          if n
+            n.xpath('//xmlns:delete',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
+          end
+        end
+
+        def deletion
+          node = deletion_node
+          if node
+            r = node.xpath('//xmlns:redirect',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent})
+            uri = read_attr(r, 'uri') if r
+            Deletion.new(node.node_id, uri)
+          end
+        end
       end
 
       module Pubsub
@@ -717,7 +831,8 @@ end
               jid     = read_attr(n,'jid') {|x| connection.entity x}
               sub     = read_attr(n,'subscription')
               sub_id  = read_attr(n,'subid')
-              Subscription.new(jid,node_id,sub,sub_id)
+              expiry  = read_attr(n,'expiry'){|x| Date.parse x}
+              Subscription.new(jid,node_id,sub,sub_id,expiry)
             end
           else
             []
@@ -756,7 +871,7 @@ end
             item_node = read_attr node, 'node'
             node.xpath('//xmlns:item',{'xmlns' => EM::Xmpp::Namespaces::PubSub}).map do |n|
               item_id = read_attr n, 'id'
-              Item.new(item_node,item_id,n.children.first)
+              Item.new(item_node,item_id,n.children.first,nil)
             end
           else
             []
@@ -799,7 +914,8 @@ end
               jid     = read_attr(n,'jid') {|x| connection.entity x}
               sub     = read_attr(n,'subscription')
               sub_id  = read_attr(n,'subid')
-              Subscription.new(jid,node_id,sub,sub_id)
+              expiry  = read_attr(n,'expiry'){|x| Date.parse x}
+              Subscription.new(jid,node_id,sub,sub_id,expiry)
             end
           else
             []
@@ -955,6 +1071,9 @@ end
       end
       class Pubsubowner < Bit
         include Contexts::Pubsubowner
+      end
+      class Pubsubevent < Bit
+        include Contexts::Pubsubevent
       end
       class Mucuser < Bit
         include Contexts::Mucuser
