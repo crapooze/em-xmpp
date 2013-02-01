@@ -318,6 +318,10 @@ module EM::Xmpp
         def query_node
           xpath('//xmlns:query',{'xmlns' => DiscoverItems}).first
         end
+        def node
+          n = query_node
+          read_attr(n, 'node') if n
+        end
         def item_nodes
           xpath('//xmlns:item',{'xmlns' => DiscoverItems})
         end
@@ -332,6 +336,7 @@ module EM::Xmpp
       end
 
       module Command
+        include Iq
         def command_node
           xpath('//xmlns:command',{'xmlns' => Commands}).first
         end
