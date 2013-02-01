@@ -21,8 +21,8 @@ end
 module Command extend self
 
   def parse_formdata(allfields)
-    allfields.split('|').map do |onefield|
-      var,type,*values = onefield.split('%')
+    allfields.split('&').map do |onefield|
+      var,type,*values = onefield.split(',')
       EM::Xmpp::Context::Contexts::Dataforms::Field.new(var,type,nil,values)
     end
   end
@@ -143,7 +143,7 @@ module Command extend self
         puts "=== PubSub subscription options form ==="
         Command.print_dataform ctx
       end
-    when 'default-subscription-options'
+    when 'pubsub-subscription-default-options'
       jid,node = param.split(':',2)
       lambda do |client|
         puts "listing default subscription options of: #{jid} (#{node})"
@@ -223,13 +223,61 @@ module Command extend self
         end
       end
 
-    when 'pubsub-options'
+    when 'pubsub-node-options'
       jid,node = param.split(':',2)
       lambda do |client|
         puts "listing PubSub node configuration options: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).configuration_options
         puts "=== PubSub node configuration options form ==="
         Command.print_dataform ctx
+      end
+
+    when 'pubsub-node-default-options'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        puts "listing default PubSub node configuration options: #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).default_configuration
+        puts "=== PubSub default node configuration options form ==="
+        Command.print_dataform ctx
+      end
+
+    when 'pubsub-configure-node'
+      jid,node,formdata = param.split(':',3)
+      lambda do |client|
+        fields = Command.parse_formdata formdata
+        form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+        puts "configuring #{fields.size} fields of node: #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).configure(form)
+      end
+
+    when 'pubsub-node-change-affiliation'
+      jid,node,affilee,aff = param.split(':',4)
+      lambda do |client|
+        puts "changing affiliation of #{affilee} to #{aff} on #{jid} (#{node})"
+        affiliation = EM::Xmpp::Context::Contexts::PubsubMain::Affiliation.new(affilee,node,aff)
+        ctx = client.entity(jid).pubsub(node).modify_affiliations([affiliation])
+      end
+
+    when 'pubsub-node-change-subscription'
+      jid,node,subscribee,sub_type,subid = param.split(':',5)
+      lambda do |client|
+        puts "changing subscription of #{subscribee} (#{subid}) to #{sub_type} on #{jid} (#{node})"
+        subscription = EM::Xmpp::Context::Contexts::PubsubMain::Subscription.new(subscribee,node,sub_type,subid)
+        ctx = client.entity(jid).pubsub(node).modify_subscriptions([subscription])
+      end
+
+    when 'pubsub-node-delete-affiliation'
+      jid,node,affilee = param.split(':',3)
+      lambda do |client|
+        puts "removing affiliation of #{affilee} on #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).delete_affiliations(affilee)
+      end
+
+    when 'pubsub-node-delete-subscription'
+      jid,node,subscribee,subid = param.split(':',4)
+      lambda do |client|
+        puts "deleting subscription of #{subscribee} (#{subid}) on #{jid} (#{node})"
+        ctx = client.entity(jid).pubsub(node).delete_subscriptions(subscribee)
       end
 
       ### MUC

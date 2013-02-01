@@ -393,7 +393,7 @@ module EM::Xmpp
       # changes the subscription status of a pubsub node (for the owner)
       # returns the iq context for the answer
       def modify_subscriptions(subs)
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
             pubsub.subscriptions(:node => node_id) do |node|
               subs.each do  |s|
@@ -408,7 +408,8 @@ module EM::Xmpp
       # changes the affiliation status of a pubsub node (for the owner)
       # returns the iq context for the answer
       def modify_affiliations(affs)
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
+        affs = [affs].flatten
+        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
             pubsub.affiliations(:node => node_id) do |node|
               affs.each do  |s|
@@ -424,7 +425,7 @@ module EM::Xmpp
       # returns the iq context for the answer
       def delete_subscriptions(jids)
         jids = [jids].flatten
-        subs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubSub::Subscription.new(jid, nil, 'none', nil)}
+        subs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubsubMain::Subscription.new(jid, nil, 'none', nil)}
         modify_subscriptions subs
       end
 
@@ -432,7 +433,7 @@ module EM::Xmpp
       # returns the iq context for the answer
       def delete_affiliations(jids)
         jids = [jids].flatten
-        affs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubSub::Affiliation.new(jid, 'none')}
+        affs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubsubMain::Affiliation.new(jid, node_id, 'none')}
         modify_affiliations affs
       end
 
