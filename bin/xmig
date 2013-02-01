@@ -487,6 +487,45 @@ module RosterClient
       ctx
     end
 
+    # Replies to item queries
+    on_iq do |ctx|
+      query = ctx.bit(:discoitems)
+      if query
+        list = items(query.to,query.node)
+        puts "==== #{query.from} discovers #{list.size} items at node #{query.node} ==="
+        reply = query.reply do |iq|
+          iq.query(:xmlns => EM::Xmpp::Namespaces::DiscoverItems,
+                   :node => EM::Xmpp::Namespaces::Commands) do |q|
+            list.each do |item|
+              q.item('jid' => item.entity, 'node'=> item.node, 'name'=>item.name)
+            end
+          end
+        end
+        send_stanza reply
+        ctx.done!
+      end
+      ctx
+    end
+
+    # Replies to command queries
+    on_iq do |ctx|
+      query = ctx.bit(:command)
+      if query
+        #TODO if the sessionid exists continue a pending command
+        #     if the action is 'prev' come back
+        puts "=== Calling command on behalf of #{query.from} ==="
+        p query.node
+        p query.sessionid
+        p query.action
+        reply = query.reply do |iq|
+            #TODO: read parameters,format the result (can be a result, a request for parameters, or a executing stage)
+        end
+        send_stanza reply
+        ctx.done!
+      end
+      ctx
+    end
+
     # Prints Pubsub event
     on_message do |ctx|
       event = ctx.bit(:pubsubevent)
@@ -527,6 +566,13 @@ module RosterClient
       end
       ctx
     end
+  end
+
+  # list of supported items for the given node
+  def items(jid,node)
+    #TODO: correctly pick items from the jid/node name
+    [EM::Xmpp::Context::Contexts::Discoitems::Item.new(jid.full, 'cmd:1','a first command'),
+    EM::Xmpp::Context::Contexts::Discoitems::Item.new(jid.full, 'cmd:2','anoter command')]
   end
 
   def stanza_end(stanza)
