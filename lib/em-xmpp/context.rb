@@ -341,11 +341,16 @@ module EM::Xmpp
           xpath('//xmlns:command',{'xmlns' => Commands}).first
         end
 
-        %w{node sessionid action}.each do |word|
+        %w{node sessionid}.each do |word|
           define_method word do
             n = command_node
             read_attr(n, word) if n
           end
+        end
+
+        def action
+          n = command_node
+          read_attr(n, 'action') || 'execute'
         end
 
         def previous?
