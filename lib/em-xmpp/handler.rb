@@ -43,6 +43,10 @@ module EM::Xmpp
         ctx.bit!(:error) if iq.error?
         ctx
       end
+      on_decorator('//xmlns:pubsub', 'xmlns' => PubSub) do |ctx|
+        ctx.bit!(:pubsub)
+        ctx
+      end
       on_decorator('//xmlns:event', 'xmlns' => PubSubEvent) do |ctx|
         ctx.bit!(:pubsubevent)
         ctx

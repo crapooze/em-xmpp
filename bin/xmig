@@ -96,7 +96,7 @@ module Command extend self
         client.entity(param).add_to_roster
       end
 
-    when 'subscribed', 'accept-subscription-from'
+    when 'subscribed', 'accept-subscription'
       lambda do |client|
         puts "accept subscription from: #{param}"
         client.entity(param).accept_subscription
@@ -177,7 +177,7 @@ module Command extend self
         puts "publishing #{payload.size} bytes to #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).publish(payload)
         ctx.bit!(:pubsub).items.each do |item|
-          puts "published: #{item.id} at #{item.node}"
+          puts "published: #{item.item_id} at #{item.node}"
         end
       end
     when 'retract'
@@ -277,7 +277,7 @@ module Command extend self
       jid,node,subscribee,subid = param.split(':',4)
       lambda do |client|
         puts "deleting subscription of #{subscribee} (#{subid}) on #{jid} (#{node})"
-        ctx = client.entity(jid).pubsub(node).delete_subscriptions(subscribee)
+        ctx = client.entity(jid).pubsub(node).delete_subscriptions(subscribee,subid)
       end
 
       ### MUC
@@ -453,6 +453,11 @@ module RosterClient
     user_data.each{|c| handle_command c}
     EM.open_keyboard Kb, self
 
+    # Writes a stack-trace on error
+    on_exception(:anything) do |ctx|
+      raise ctx['error']
+    end
+
 
     # Signal presence subscriptions
     on_presence do |ctx|
@@ -490,36 +495,52 @@ module RosterClient
     # Prints Pubsub event
     on_message do |ctx|
       event = ctx.bit(:pubsubevent)
+      delay = ctx.bit(:delay)
+      stamp = delay.stamp if delay
       if event
-        puts "=== PubSub event #{event.service} ==="
-        event.items.each do |i|
-          puts "+item> #{i.node} #{i.item_id} (by #{i.publisher || 'N/A'})"
-          puts i.payload
-        end
-        event.retractions.each do |r|
-          puts "-item> #{r.node} #{r.item_id}"
+        puts "=== PubSub event #{event.service} #{stamp} ==="
+        if event.items_node #oddly enough, retractions fall in items_node
+          items       = event.items
+          retractions = event.retractions
+
+          if items.any? or retractions.any?
+            items.each do |i|
+              puts "+item> #{i.node} #{i.item_id} (by #{i.publisher || 'N/A'})"
+              puts i.payload
+            end
+
+            event.retractions.each do |r|
+              puts "-item> #{r.node} #{r.item_id}"
+            end
+          else
+            puts "empty items list for #{event.node_id}"
+          end
         end
 
-        #wrong
+
         if event.purge
-          puts "node purged #{event.node_id}"
+          puts "node purged #{event.purge.node}"
         end
 
-        #wrong
         if event.deletion
-          puts "node destroyed #{event.node_id}"
+          del = event.deletion
+          puts "node destroyed #{del.node}"
+          puts "  now redirects to #{del.redirect}" if del.redirect
         end
 
-        #tocheck
         if event.configuration
           cfg = event.configuration
           puts "new node configuration for #{cfg.node}"
-          puts cfg.config
+          Command.print_dataform(ctx)
         end
 
-        #tocheck
-        if event.subscription
-          sub = event.subscription
+        ctx.done!
+      end
+
+      event = ctx.bit(:pubsub)
+      if event
+        puts "=== PubSub #{event.service} ==="
+        event.subscriptions.each do |sub|
           puts "subscription of #{sub.jid} (#{sub.sub_id}) status is now #{sub.subscription} for #{sub.node}"
           puts "expires on #{sub.expiry}" if sub.expiry
         end

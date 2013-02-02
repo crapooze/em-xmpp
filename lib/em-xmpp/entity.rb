@@ -397,7 +397,7 @@ module EM::Xmpp
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
             pubsub.subscriptions(:node => node_id) do |node|
               subs.each do  |s|
-                node.subscription(:jid => s.jid, :subscription => s.subscription)
+                node.subscription(:jid => s.jid, :subscription => s.subscription, :subid => s.sub_id)
               end
             end
           end
@@ -423,9 +423,10 @@ module EM::Xmpp
 
       # deletes the subscription of one or multiple subscribees of a pubsub node (for the owner)
       # returns the iq context for the answer
-      def delete_subscriptions(jids)
+      def delete_subscriptions(jids,subids=nil)
         jids = [jids].flatten
-        subs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubsubMain::Subscription.new(jid, nil, 'none', nil)}
+        subids = [subids].flatten
+        subs = jids.zip(subids).map{|jid,subid| EM::Xmpp::Context::Contexts::PubsubMain::Subscription.new(jid, nil, 'none', subid, nil)}
         modify_subscriptions subs
       end
 
