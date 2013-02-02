@@ -156,6 +156,11 @@ module EM::Xmpp
         end
         connection.send_stanza iq
       end
+
+      def ack_ibb(reply_id)
+        iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id)
+        connection.send_stanza iq
+      end
     end
 
     class PubSub < Entity

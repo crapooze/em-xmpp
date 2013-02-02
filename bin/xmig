@@ -443,7 +443,21 @@ module Command extend self
         fields = Command.parse_formdata formdata
         form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
         puts "configuring #{fields.size} fields to accept transfer: #{jid}"
-        ctx = client.entity(jid).transfer.negotiate(id,form)
+        client.entity(jid).transfer.negotiate(id,form)
+      end
+    when 'ack-ibb'
+      jid,iq_id = param.split(':',2)
+      lambda do |client|
+        puts "acknowledging IBB (iq-id:#{iq_id})"
+        client.entity(jid).transfer.ack_ibb(iq_id)
+      end
+    when 'iq'
+      jid,iq_type,iq_id = param.split(':',3)
+      lambda do |client|
+        puts "sending iq (#{iq_type}/#{iq_id})"
+        args = {'to' => jid, 'type' => iq_type, 'id' => iq_id}
+        iq = client.iq_stanza(args)
+        client.send_stanza iq
       end
     else
       raise CommandParseError, "doesn't know such command: #{cmd}"
@@ -562,11 +576,27 @@ module RosterClient
     on_iq do |ctx|
       si =  ctx.bit(:streaminitiation)
       if si
-        puts "=== FileTransfer request from #{si.from} (iq-id:#{si.id}) ==="
+        puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
         Command.print_dataform ctx
 
+        ctx.done!
+      end
+      ctx
+    end
+
+    on_iq do |ctx|
+      ibb = ctx.bit(:ibb)
+      if ibb
+        if ibb.open_node
+          puts "=== FileTransfer IBB starting #{ibb.from}:#{ibb.id} (sid: #{ibb.sid}) ==="
+        elsif ibb.close_node
+          puts "=== FileTransfer IBB done #{ibb.from}:#{ibb.id} (sid: #{ibb.sid}) ==="
+        elsif ibb.data_node
+          puts "data for #{ibb.from}:#{ibb.id} (sid:#{ibb.sid})"
+          puts ibb.data
+        end
         ctx.done!
       end
       ctx

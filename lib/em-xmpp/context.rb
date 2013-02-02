@@ -694,6 +694,35 @@ module EM::Xmpp
         end
       end
 
+      module Ibb
+        include IncomingStanza
+        def open_node
+          xpath('//xmlns:open',{'xmlns' => Namespaces::IBB}).first
+        end
+        def data_node
+          xpath('//xmlns:data',{'xmlns' => Namespaces::IBB}).first
+        end
+        def close_node
+          xpath('//xmlns:close',{'xmlns' => Namespaces::IBB}).first
+        end
+        def block_size
+          n = open_node
+          read_attr(n,'block-size'){|x| Integer(x)} if n
+        end
+        def sid
+          n = open_node || data_node || close_node
+          read_attr(n,'sid') if n
+        end
+        def stanza_type
+          n = open_node
+          read_attr(n,'stanza') if n
+        end
+        def data
+          n = data_node
+          n.content if n
+        end
+      end
+
       module PubsubMain
         include IncomingStanza
         Subscription = Struct.new(:jid, :node, :subscription, :sub_id, :expiry)
@@ -1062,6 +1091,9 @@ module EM::Xmpp
       end
       class Streaminitiation < Bit
         include Contexts::Streaminitiation
+      end
+      class Ibb < Bit
+        include Contexts::Ibb
       end
       class Pubsub < Bit
         include Contexts::Pubsub
