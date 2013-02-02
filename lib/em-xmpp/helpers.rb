@@ -18,10 +18,24 @@ module EM::Xmpp
       Fiber.yield
     end
 
-    def start_conversation(ctx,&blk)
-      EM::Xmpp::Conversation.start(ctx,&blk)
+    attr_reader :conversations
+
+    def framework_ready(*args,&blk)
+      @conversations = {}
     end
 
+    def start_conversation(ctx,key,state=nil,&blk)
+      EM::Xmpp::Conversation.start(ctx,state) do |conv|
+        conversations[key] = conv
+        blk.call conv
+        conversations.delete key
+      end
+    end
+
+    def conversation(key)
+      @conversations[key]
+    end
+    
     def build_submit_form(xml,form)
       xml.x(:xmlns => DataForms, :type => 'submit') do |x|
         form.fields.each do |field|

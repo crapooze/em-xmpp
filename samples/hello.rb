@@ -17,6 +17,7 @@ module RosterClient
   include EM::Xmpp::Helpers
 
   def ready
+    super #setup helpers
     puts "***** #{@jid} ready"
 
     on_presence do |ctx|
@@ -39,12 +40,16 @@ module RosterClient
 
       puts "**** message from #{msg.from}"
 
-      if @conv 
-        @conv.resume ctx
+      key = msg.from.to_s
+
+      conv = conversation(key)
+
+      if conv 
+        conv.resume ctx
       else
         x = rand(300)
         y = rand(300)
-        @conv = start_conversation(ctx) do |c|
+        start_conversation(ctx, key) do |c|
           rep = c.send_stanza(msg.reply{|xml| xml.body("how much is #{x} - #{y} ?")}, 5)
           greeting = if rep.interrupted?
                        if rep.ctx.bit(:message).body == (x - y).to_s
@@ -56,7 +61,6 @@ module RosterClient
                        "too slow, laggard"
                      end
           self.send_stanza(msg.reply{|xml| xml.body(greeting)})
-          @conv = nil
         end
       end
 

@@ -56,6 +56,7 @@ module EM::Xmpp
       @pass    = nil
       @handler = Routine.new self
       send_stanza presence_stanza()
+      framework_ready if respond_to? :framework_ready
       ready
     end
 

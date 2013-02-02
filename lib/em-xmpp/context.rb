@@ -713,6 +713,10 @@ module EM::Xmpp
           n = open_node || data_node || close_node
           read_attr(n,'sid') if n
         end
+        def seq
+          n = data_node
+          read_attr(n,'seq') if n
+        end
         def stanza_type
           n = open_node
           read_attr(n,'stanza') if n

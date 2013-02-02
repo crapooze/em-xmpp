@@ -459,6 +459,12 @@ module Command extend self
         iq = client.iq_stanza(args)
         client.send_stanza iq
       end
+    when 'conversations'
+      lambda do |client|
+        client.conversations.keys.each do |conv|
+          puts conv
+        end
+      end
     else
       raise CommandParseError, "doesn't know such command: #{cmd}"
     end
@@ -589,19 +595,67 @@ module RosterClient
     on_iq do |ctx|
       ibb = ctx.bit(:ibb)
       if ibb
+        key = ibb_conversation_key(ibb)
+
         if ibb.open_node
-          puts "=== FileTransfer IBB starting #{ibb.from}:#{ibb.id} (sid: #{ibb.sid}) ==="
-        elsif ibb.close_node
-          puts "=== FileTransfer IBB done #{ibb.from}:#{ibb.id} (sid: #{ibb.sid}) ==="
-        elsif ibb.data_node
-          puts "data for #{ibb.from}:#{ibb.id} (sid:#{ibb.sid})"
-          puts ibb.data
+          ibb_conversation(ctx,key) do |step|
+            step.on(:start) do
+              puts "=== FileTransfer IBB starting (sid: #{ibb.sid}) ==="
+            end
+            step.on(:chunk) do |state|
+              puts "=== Incoming chunk (#{state.buffer.size} bytes so far) (sid:#{ibb.sid})"
+            end
+            step.on(:done) do
+              puts "=== FileTransfer IBB done (sid: #{ibb.sid}) ==="
+            end
+          end
+        else
+          conv = conversation(key)
+          conv.resume ctx if conv
         end
         ctx.done!
       end
       ctx
     end
   end
+
+  def ibb_conversation_key(ibb)
+    [ 'ibb', ibb.from , ibb.sid ].map(&:to_s).join('|')
+  end
+
+  IBBState = Struct.new(:buffer, :last_iq, :done)
+
+  def ibb_conversation(initial_ctx,key,&blk)
+    state = IBBState.new("", initial_ctx.bit(:iq), :done)
+
+    start_conversation(initial_ctx,key,state) do |conv|
+      conv.prepare_callbacks(:start, :chunk, :done, &blk)
+
+      conv.callback :start
+
+      loop do
+        # ack last iq
+        send_stanza state.last_iq.reply
+
+        # expect some data chunk, may wait forever
+        chunk_ctx = conv.delay.ctx
+        chunk         = chunk_ctx.bit(:ibb)
+        state.last_iq = chunk_ctx.bit(:iq)
+
+        # we should either have a final node or some data
+        if chunk.close_node
+          state.done = true
+          conv.callback :done
+        else
+          state.buffer << chunk.data
+          conv.callback :chunk
+        end
+      end
+
+      send_stanza state.last_iq.reply
+    end
+  end
+
 
   def stanza_end(stanza)
     puts stanza if @show_xml
