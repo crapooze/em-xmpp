@@ -435,6 +435,16 @@ module Command extend self
           puts "#{i.entity} (#{i.node}) -- #{i.name || i.entity}"
         end
       end
+
+      # file-transfer
+    when 'negotiate-transfer'
+      jid,id,formdata = param.split(':',3)
+      lambda do |client|
+        fields = Command.parse_formdata formdata
+        form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+        puts "configuring #{fields.size} fields to accept transfer: #{jid}"
+        ctx = client.entity(jid).transfer.negotiate(id,form)
+      end
     else
       raise CommandParseError, "doesn't know such command: #{cmd}"
     end
@@ -544,6 +554,19 @@ module RosterClient
           puts "subscription of #{sub.jid} (#{sub.sub_id}) status is now #{sub.subscription} for #{sub.node}"
           puts "expires on #{sub.expiry}" if sub.expiry
         end
+        ctx.done!
+      end
+      ctx
+    end
+
+    on_iq do |ctx|
+      si =  ctx.bit(:streaminitiation)
+      if si
+        puts "=== FileTransfer request from #{si.from} (iq-id:#{si.id}) ==="
+        puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
+        puts "description: #{si.description}" if si.description
+        Command.print_dataform ctx
+
         ctx.done!
       end
       ctx

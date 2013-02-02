@@ -140,6 +140,24 @@ module EM::Xmpp
       PubSub.new(connection, node_jid)
     end
 
+    # returns a FileTransfer entity with same jid
+    def transfer
+      Transfer.new(connection, jid)
+    end
+
+    class Transfer < Entity
+      def negotiate(reply_id,form)
+        iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do |xml|
+          xml.si(:xmlns => EM::Xmpp::Namespaces::StreamInitiation) do |si|
+            si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
+              connection.build_submit_form(feat,form)
+            end
+          end
+        end
+        connection.send_stanza iq
+      end
+    end
+
     class PubSub < Entity
       # returns the pubsub entity for a specific node_id of this entity
       def node(node_id)

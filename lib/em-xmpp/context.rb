@@ -634,9 +634,16 @@ module EM::Xmpp
         end
       end
 
+      module Featurenegotiation
+        include Dataforms
+        def feature_node
+          xpath('//xmlns:feature',{'xmnls' => Namespaces::FeatureNeg})
+        end
+      end
+
       module Streaminitiation
         include Iq
-        include Dataforms
+        include Featurenegotiation
         def si_node
           xpath('//xmlns:si',{'xmlns' => Namespaces::StreamInitiation}).first
         end
@@ -671,7 +678,6 @@ module EM::Xmpp
           n = file_node
           n.children.find{|n| n.name == 'range'} if n
         end
-        # TODO: range on requests
         def description
           n = file_node
           if n
