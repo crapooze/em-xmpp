@@ -651,9 +651,9 @@ module RosterClient
             puts "Submit? Y/n"
           end
 
-          step.on(:user_input) do |state|
+          step.on(:user_answer) do |state|
             values = [state.user_input]
-            response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(field.var,nil,nil,values,[])
+            response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
             state.answers.fields << response_field
           end
 
@@ -680,7 +680,8 @@ module RosterClient
 
           step.on(:submit) do |state|
             if state.user_input == 'n'
-              si.reply(:type => 'error')
+              puts "cancelling"
+              send_stanza si.reply(:type => 'error')
             else
               si.from.transfer.negotiation_reply(si.id, state.answers)
             end
@@ -855,19 +856,19 @@ module RosterClient
     state = DataFormState.new(form, answers, 0, nil)
 
     start_conversation(initial_ctx,:dataform,state) do |conv|
-      conv.prepare_callbacks(:start, :ask, :user_input, :confirm, :submit, &blk)
+      conv.prepare_callbacks(:start, :ask, :user_answer, :confirm, :submit, &blk)
 
       conv.callback(:start)
       state.form.fields.each_with_index do |field,idx|
         state.current_idx = idx
         conv.callback(:ask)
         state.user_input = conv.delay.ctx
-        conv.callback(:user_input)
+        conv.callback(:user_answer)
         state.user_input = nil
       end
 
       conv.callback(:confirm)
-      user_input = conv.delay.ctx
+      state.user_input = conv.delay.ctx
       conv.callback(:submit)
     end
   end
