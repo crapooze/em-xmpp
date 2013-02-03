@@ -651,6 +651,12 @@ module RosterClient
             puts "Submit? Y/n"
           end
 
+          step.on(:user_input) do |state|
+            values = [state.user_input]
+            response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(field.var,nil,nil,values,[])
+            state.answers.fields << response_field
+          end
+
           step.on(:ask) do |state|
             fidx  = state.current_idx
             field = state.current_field
@@ -673,12 +679,11 @@ module RosterClient
           end
 
           step.on(:submit) do |state|
-            si.from.transfer.negotiation_reply(si.id, state.answers)
-          end
-
-          step.on(:cancel) do
-            puts "cancelled"
-            #TODO: send iq/si refusing transfer
+            if state.user_input == 'n'
+              si.reply(:type => 'error')
+            else
+              si.from.transfer.negotiation_reply(si.id, state.answers)
+            end
           end
         end
 
@@ -838,7 +843,7 @@ module RosterClient
     end
   end
 
-  DataFormState = Struct.new(:form, :answers, :current_idx) do
+  DataFormState = Struct.new(:form, :answers, :current_idx, :user_input) do
     def current_field
       form.fields[current_idx]
     end
@@ -847,28 +852,23 @@ module RosterClient
   def dataform_conversation(initial_ctx,&blk)
     form = initial_ctx.env['dataform']
     answers = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit',[],nil,nil)
-    state = DataFormState.new(form, answers, 0)
+    state = DataFormState.new(form, answers, 0, nil)
 
     start_conversation(initial_ctx,:dataform,state) do |conv|
-      conv.prepare_callbacks(:start, :ask, :confirm, :submit, :cancel, &blk)
+      conv.prepare_callbacks(:start, :ask, :user_input, :confirm, :submit, &blk)
 
       conv.callback(:start)
-      state.form.fields.each_with_index do |field,fidx|
-        state.current_idx = fidx
+      state.form.fields.each_with_index do |field,idx|
+        state.current_idx = idx
         conv.callback(:ask)
-        user_input = conv.delay.ctx
-        values = [user_input]
-        response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(field.var,nil,nil,values,[])
-        state.answers.fields << response_field
+        state.user_input = conv.delay.ctx
+        conv.callback(:user_input)
+        state.user_input = nil
       end
 
       conv.callback(:confirm)
       user_input = conv.delay.ctx
-      if user_input == 'n'
-        conv.callback(:cancel)
-      else
-        conv.callback(:submit)
-      end
+      conv.callback(:submit)
     end
   end
 
