@@ -650,6 +650,17 @@ module EM::Xmpp
         def file_node
           xpath('//xmlns:file',{'xmlns' => Namespaces::FileTransfer}).first
         end
+        def range_node
+          xpath('//xmlns:range',{'xmlns' => Namespaces::FileTransfer}).first
+        end
+        def range_length
+          n = range_node
+          read_attr(n, 'length') {|x| Integer(x)} if n
+        end
+        def range_offset
+          n = range_node
+          read_attr(n, 'offset') {|x| Integer(x)} if n
+        end
         def mime_type
           n = si_node
           read_attr(n, 'mime-type') if n

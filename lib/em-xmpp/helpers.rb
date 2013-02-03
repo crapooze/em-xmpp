@@ -42,7 +42,12 @@ module EM::Xmpp
           args = {'var' => field.var}
           args = args.merge('type' => field.type) unless field.type.nil? or field.type.empty?
           x.field(args) do |f|
-            field.values.each do |value|
+            (field.options||[]).each do |opt_value|
+              f.option do |o|
+                o.value opt_value
+              end
+            end
+            (field.values||[]).each do |value|
               f.value value
             end
           end

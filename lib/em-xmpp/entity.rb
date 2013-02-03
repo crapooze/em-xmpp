@@ -140,13 +140,45 @@ module EM::Xmpp
       PubSub.new(connection, node_jid)
     end
 
-    # returns a FileTransfer entity with same jid
+    # returns a (file-)Transfer entity with same jid
     def transfer
       Transfer.new(connection, jid)
     end
 
     class Transfer < Entity
-      def negotiate(reply_id,form)
+      def self.describe_file(path)
+        ret = {}
+        ret[:name] = File.basename path
+        ret[:size] = File.read(path).size #FIXME use file stats
+        ret[:mime] = 'text/plain' #FIXME
+        ret[:hash] = nil #TODO
+        ret[:date] = nil #TODO
+        ret
+      end
+
+      def negotiation_request(filedesc,sid,form)
+        si_args = {'profile'    => EM::Xmpp::Namespaces::FileTransfer,
+                   'mime-type'  => filedesc[:mime]
+        }
+        file_args = {'name' => filedesc[:name],
+          'size' => filedesc[:size],
+          'hash' => filedesc[:md5],
+          'date' => filedesc[:date]
+        }
+        iq = connection.iq_stanza('to'=>jid,'type'=>'set') do |xml|
+          xml.si({:xmlns => EM::Xmpp::Namespaces::StreamInitiation, :id => sid}.merge(si_args)) do |si|
+            si.file({:xmlns => EM::Xmpp::Namespaces::FileTransfer}.merge(file_args)) do |file|
+              file.desc filedesc[:description]
+            end
+            si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
+              connection.build_submit_form(feat,form)
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      def negotiation_reply(reply_id,form)
         iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do |xml|
           xml.si(:xmlns => EM::Xmpp::Namespaces::StreamInitiation) do |si|
             si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
@@ -154,11 +186,6 @@ module EM::Xmpp
             end
           end
         end
-        connection.send_stanza iq
-      end
-
-      def ack_ibb(reply_id)
-        iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id)
         connection.send_stanza iq
       end
     end

@@ -61,10 +61,10 @@ module EM::Xmpp
     end
     public
 
-    def callback(key,*args,&blk)
+    def callback(key,&blk)
       cb = callbacks.cb(key)
       raise RuntimeError, "no such callback #{key}" unless cb
-      cb.call *args, &blk
+      cb.call state, &blk
     end
 
     def start_timeout(seconds=:forever)

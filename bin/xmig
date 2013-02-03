@@ -437,19 +437,67 @@ module Command extend self
       end
 
       # file-transfer
-    when 'negotiate-transfer'
+    when 'propose-transfer'
+      jid,path,txt,formdata = param.split(':',3)
+      sid = "ft_#{rand(65535)}"
+      lambda do |client|
+        form = if formdata
+                 puts "configuring #{fields.size} fields to propose transfer: #{jid}"
+                 fields = Command.parse_formdata formdata
+                 EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+               else
+                 puts "using default form"
+                 fields = [EM::Xmpp::Context::Contexts::Dataforms::Field.new(
+                   'stream-method',
+                   'list-single',
+                   nil, #user-friendly label
+                   [],  #current values
+                   [EM::Xmpp::Namespaces::IBB] #available options
+                 )
+                 ]
+                 EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+               end
+        desc = EM::Xmpp::Entity::Transfer.describe_file path
+        desc[:description] = txt
+        ctx = client.entity(jid).transfer.negotiation_request(desc,sid,form)
+        if ctx.bit(:iq).type == 'result'
+          method = ctx.bit(:dataforms).x_forms.first.fields.find{|f| f.var == 'stream-method'}
+          puts "accepted transfer via #{method.value}" if method
+          case method.value
+          when EM::Xmpp::Namespaces::IBB
+            key = client.ibb_conversation_key_for_sid(ctx.bit(:stanza), sid)
+            ctx.env['path']       = path
+            ctx.env['stream.id']  = sid
+            ctx.env['peer']       = ctx.bit(:iq).from
+            client.ibb_ul_conversation(ctx,key) do |step|
+              step.on(:start) do
+                puts "=== Starting Upload ==="
+              end
+              step.on(:cancel) do
+                raise RuntimeError, 'cancel'
+              end
+              step.on(:chunk) do |state|
+                puts "=== Outgoing chunk #{state.last_chunk.size} bytes ==="
+                puts state.last_chunk
+              end
+              step.on(:done) do
+                puts "=== Upload Finished ==="
+              end
+            end
+          else
+            puts "unsupported method, will have to cancel"
+          end
+        else
+          puts "refused"
+        end
+      end
+    when 'accept-transfer'
       jid,id,formdata = param.split(':',3)
       lambda do |client|
         fields = Command.parse_formdata formdata
         form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
         puts "configuring #{fields.size} fields to accept transfer: #{jid}"
-        client.entity(jid).transfer.negotiate(id,form)
-      end
-    when 'ack-ibb'
-      jid,iq_id = param.split(':',2)
-      lambda do |client|
-        puts "acknowledging IBB (iq-id:#{iq_id})"
-        client.entity(jid).transfer.ack_ibb(iq_id)
+        client.entity(jid).transfer.negotiation_reply(id,form)
       end
     when 'iq'
       jid,iq_type,iq_id = param.split(':',3)
@@ -596,14 +644,18 @@ module RosterClient
       ibb = ctx.bit(:ibb)
       if ibb
         key = ibb_conversation_key(ibb)
+        p "**trying to resume conv #{key}**"
 
         if ibb.open_node
-          ibb_conversation(ctx,key) do |step|
+          ibb_dl_conversation(ctx,key) do |step|
             step.on(:start) do
               puts "=== FileTransfer IBB starting (sid: #{ibb.sid}) ==="
             end
+            step.on(:cancel) do
+              raise RuntimeError, 'cancel'
+            end
             step.on(:chunk) do |state|
-              puts "=== Incoming chunk (#{state.buffer.size} bytes so far) (sid:#{ibb.sid})"
+              puts "=== Incoming chunk (#{state.last_chunk.size} bytes) (sid:#{ibb.sid})"
             end
             step.on(:done) do
               puts "=== FileTransfer IBB done (sid: #{ibb.sid}) ==="
@@ -620,20 +672,90 @@ module RosterClient
   end
 
   def ibb_conversation_key(ibb)
-    [ 'ibb', ibb.from , ibb.sid ].map(&:to_s).join('|')
+    ibb_conversation_key_for_sid ibb, ibb.sid
   end
 
-  IBBState = Struct.new(:buffer, :last_iq, :done)
+  def ibb_conversation_key_for_sid(x,sid)
+    [ 'ibb', x.from , sid ].map(&:to_s).join('|')
+  end
 
-  def ibb_conversation(initial_ctx,key,&blk)
-    state = IBBState.new("", initial_ctx.bit(:iq), :done)
+  IBBDLState = Struct.new(:buffer, :last_iq, :done, :last_chunk)
+  IBBULState = Struct.new(:jid, :sid, :chunk_size, :ptr, :chunk_idx, :done, :last_chunk)
+
+  def ibb_ul_conversation(initial_ctx,key,&blk)
+    path = initial_ctx.env['path']
+    sid  = initial_ctx.env['stream.id']
+    jid  = initial_ctx.env['peer']
+
+    #encode data
+    raw_data = File.read path
+    data     = Base64.strict_encode64 raw_data
+
+    state = IBBULState.new(jid,sid,4096,0,0,false)
 
     start_conversation(initial_ctx,key,state) do |conv|
-      conv.prepare_callbacks(:start, :chunk, :done, &blk)
+      conv.prepare_callbacks(:start, :cancel, :chunk, :done, &blk)
+
+      catch :interrupt do 
+        # opens transfer
+        iq = iq_stanza(:type => 'set', 'to' => state.jid, 'id' => "tx.#{sid}.#{state.ptr}") do |xml|
+          xml.open('xmlns' => EM::Xmpp::Namespaces::IBB, 'block-size' => state.chunk_size, 'sid' => state.sid, 'stanza' => 'iq')
+        end
+        ret = conv.send_stanza iq, 10
+
+        if ret.interrupted?
+          rsp = ret.ctx.bit(:iq)
+          if rsp.type == 'error'
+            conv.callback :cancel
+            throw :interrupt
+          else
+            conv.callback :start
+          end
+        else
+          conv.callback :cancel
+          throw :interrupt
+        end
+
+        # uploads all chunk
+        until state.done do
+          # send a chunk of encoded data and wait for an ack
+          blk = data.slice(state.ptr, state.chunk_size)
+          state.last_chunk = blk
+          iq = iq_stanza(:type => 'set', 'to' => state.jid, 'id' => "tx.#{sid}.#{state.ptr}") do |xml|
+            xml.data({'xmlns' => EM::Xmpp::Namespaces::IBB, 'sid' => state.sid, 'seq' => state.chunk_idx}, blk)
+          end
+
+          ret = conv.send_stanza iq
+          unless ret.ctx.bit(:iq).type == 'result'
+            conv.callback :cancel
+            throw :interrupt
+          end
+
+          conv.callback :chunk
+          state.ptr += state.chunk_size
+          state.chunk_idx += 1
+          state.done = true if state.ptr > data.size
+        end
+
+        # notify the end of the IBB
+        iq = iq_stanza(:type => 'set', 'to' => state.jid) do |xml|
+          xml.close('xmlns' => EM::Xmpp::Namespaces::IBB, 'sid' => state.sid)
+        end
+        ret = conv.send_stanza iq
+        conv.callback :done
+      end
+    end
+  end
+
+  def ibb_dl_conversation(initial_ctx,key,&blk)
+    state = IBBDLState.new("", initial_ctx.bit(:iq), false, nil)
+
+    start_conversation(initial_ctx,key,state) do |conv|
+      conv.prepare_callbacks(:start, :cancel, :chunk, :done, &blk)
 
       conv.callback :start
 
-      loop do
+      until state.done do
         # ack last iq
         send_stanza state.last_iq.reply
 
@@ -647,6 +769,7 @@ module RosterClient
           state.done = true
           conv.callback :done
         else
+          state.last_chunk = chunk.data
           state.buffer << chunk.data
           conv.callback :chunk
         end
