@@ -242,8 +242,8 @@ module Command extend self
       jid,node = param.split(':',2)
       lambda do |client|
         ctx = client.entity(jid).pubsub(node).configuration_options
-        client.default_dataform_conversation(ctx,"=== Configuring PubSub node ===") do |state|
-          client.entity(jid).pubsub(node).configure(state.answers)
+        client.default_dataform_conversation(ctx,"=== Configuring PubSub node ===") do |proceed,state|
+          client.entity(jid).pubsub(node).configure(state.answers) if proceed
         end
       end
 
@@ -648,8 +648,12 @@ module RosterClient
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
 
-        default_dataform_conversation(ctx, "Negotiating stream") do |state|
-          si.from.transfer.negotiation_reply(si.id, state.answers)
+        default_dataform_conversation(ctx, "Negotiating stream") do |proceed,state|
+          if proceed
+            si.from.transfer.negotiation_reply(si.id, state.answers)
+          else
+            send_stanza si.reply(:type => 'error')
+          end
         end
 
         ctx.done!
@@ -880,9 +884,10 @@ module RosterClient
       step.on(:submit) do |state|
         if state.user_input == 'n'
           puts "Cancelled"
+          action.call(false, state)
         else
           puts "Proceeding"
-          action.call(state)
+          action.call(true, state)
         end
       end
     end
