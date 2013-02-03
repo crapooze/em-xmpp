@@ -638,11 +638,10 @@ module RosterClient
         puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
-        Command.print_context_dataforms ctx
         ctx.env['dataform'] = ctx.bit!(:dataforms).form
         dataform_conversation(ctx) do |step|
           step.on(:start) do
-            puts "=== #{si.from} wants to send you a file ==="
+            puts "Negotiating stream"
           end
 
           step.on(:confirm) do |state|
