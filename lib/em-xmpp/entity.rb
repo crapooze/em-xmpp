@@ -140,6 +140,56 @@ module EM::Xmpp
       PubSub.new(connection, node_jid)
     end
 
+    # returns a (file-)Transfer entity with same jid
+    def transfer
+      Transfer.new(connection, jid)
+    end
+
+    class Transfer < Entity
+      def self.describe_file(path)
+        ret = {}
+        ret[:name] = File.basename path
+        ret[:size] = File.read(path).size #FIXME use file stats
+        ret[:mime] = 'text/plain' #FIXME
+        ret[:hash] = nil #TODO
+        ret[:date] = nil #TODO
+        ret
+      end
+
+      def negotiation_request(filedesc,sid,form)
+        si_args = {'profile'    => EM::Xmpp::Namespaces::FileTransfer,
+                   'mime-type'  => filedesc[:mime]
+        }
+        file_args = {'name' => filedesc[:name],
+          'size' => filedesc[:size],
+          'hash' => filedesc[:md5],
+          'date' => filedesc[:date]
+        }
+        iq = connection.iq_stanza('to'=>jid,'type'=>'set') do |xml|
+          xml.si({:xmlns => EM::Xmpp::Namespaces::StreamInitiation, :id => sid}.merge(si_args)) do |si|
+            si.file({:xmlns => EM::Xmpp::Namespaces::FileTransfer}.merge(file_args)) do |file|
+              file.desc filedesc[:description]
+            end
+            si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
+              connection.build_submit_form(feat,form)
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      def negotiation_reply(reply_id,form)
+        iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do |xml|
+          xml.si(:xmlns => EM::Xmpp::Namespaces::StreamInitiation) do |si|
+            si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
+              connection.build_submit_form(feat,form)
+            end
+          end
+        end
+        connection.send_stanza iq
+      end
+    end
+
     class PubSub < Entity
       # returns the pubsub entity for a specific node_id of this entity
       def node(node_id)
@@ -397,7 +447,7 @@ module EM::Xmpp
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
             pubsub.subscriptions(:node => node_id) do |node|
               subs.each do  |s|
-                node.subscription(:jid => s.jid, :subscription => s.subscription)
+                node.subscription(:jid => s.jid, :subscription => s.subscription, :subid => s.sub_id)
               end
             end
           end
@@ -423,9 +473,10 @@ module EM::Xmpp
 
       # deletes the subscription of one or multiple subscribees of a pubsub node (for the owner)
       # returns the iq context for the answer
-      def delete_subscriptions(jids)
+      def delete_subscriptions(jids,subids=nil)
         jids = [jids].flatten
-        subs = jids.map{|jid| EM::Xmpp::Context::Contexts::PubsubMain::Subscription.new(jid, nil, 'none', nil)}
+        subids = [subids].flatten
+        subs = jids.zip(subids).map{|jid,subid| EM::Xmpp::Context::Contexts::PubsubMain::Subscription.new(jid, nil, 'none', subid, nil)}
         modify_subscriptions subs
       end
 

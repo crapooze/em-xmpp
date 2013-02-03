@@ -61,6 +61,8 @@ module EM::Xmpp
     MucRoomconfig = 'http://jabber.org/protocol/muc#roomconfig'
     #Stream initiation offer
     StreamInitiation = 'http://jabber.org/protocol/si'
+    #In-Band Bytestreams
+    IBB = 'http://jabber.org/protocol/ibb'
     #FileTransfer
     FileTransfer = 'http://jabber.org/protocol/si/profile/file-transfer'
     #Feature Negotiation

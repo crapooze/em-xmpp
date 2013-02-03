@@ -96,7 +96,7 @@ module Command extend self
         client.entity(param).add_to_roster
       end
 
-    when 'subscribed', 'accept-subscription-from'
+    when 'subscribed', 'accept-subscription'
       lambda do |client|
         puts "accept subscription from: #{param}"
         client.entity(param).accept_subscription
@@ -177,7 +177,7 @@ module Command extend self
         puts "publishing #{payload.size} bytes to #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).publish(payload)
         ctx.bit!(:pubsub).items.each do |item|
-          puts "published: #{item.id} at #{item.node}"
+          puts "published: #{item.item_id} at #{item.node}"
         end
       end
     when 'retract'
@@ -277,7 +277,7 @@ module Command extend self
       jid,node,subscribee,subid = param.split(':',4)
       lambda do |client|
         puts "deleting subscription of #{subscribee} (#{subid}) on #{jid} (#{node})"
-        ctx = client.entity(jid).pubsub(node).delete_subscriptions(subscribee)
+        ctx = client.entity(jid).pubsub(node).delete_subscriptions(subscribee,subid)
       end
 
       ### MUC
@@ -435,6 +435,83 @@ module Command extend self
           puts "#{i.entity} (#{i.node}) -- #{i.name || i.entity}"
         end
       end
+
+      # file-transfer
+    when 'send-file'
+      jid,path,txt,formdata = param.split(':',3)
+      sid = "ft_#{rand(65535)}"
+      lambda do |client|
+        form = if formdata
+                 puts "configuring #{fields.size} fields to propose transfer: #{jid}"
+                 fields = Command.parse_formdata formdata
+                 EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+               else
+                 puts "using default form"
+                 fields = [EM::Xmpp::Context::Contexts::Dataforms::Field.new(
+                   'stream-method',
+                   'list-single',
+                   nil, #user-friendly label
+                   [],  #current values
+                   [EM::Xmpp::Namespaces::IBB] #available options
+                 )
+                 ]
+                 EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+               end
+        desc = EM::Xmpp::Entity::Transfer.describe_file path
+        desc[:description] = txt
+        ctx = client.entity(jid).transfer.negotiation_request(desc,sid,form)
+        if ctx.bit(:iq).type == 'result'
+          method = ctx.bit(:dataforms).x_forms.first.fields.find{|f| f.var == 'stream-method'}
+          puts "accepted transfer via #{method.value}" if method
+          case method.value
+          when EM::Xmpp::Namespaces::IBB
+            key = client.ibb_conversation_key_for_sid(ctx.bit(:stanza), sid)
+            ctx.env['path']       = path
+            ctx.env['stream.id']  = sid
+            ctx.env['peer']       = ctx.bit(:iq).from
+            client.ibb_ul_conversation(ctx,key) do |step|
+              step.on(:start) do
+                puts "=== Starting Upload ==="
+              end
+              step.on(:cancel) do
+                puts "=== Upload canceled ==="
+              end
+              step.on(:chunk) do |state|
+                puts "=== Outgoing chunk #{state.last_chunk.size} bytes ==="
+              end
+              step.on(:done) do
+                puts "=== Upload Finished ==="
+              end
+            end
+          else
+            puts "unsupported method, will have to cancel"
+          end
+        else
+          puts "refused"
+        end
+      end
+    when 'receive-file'
+      jid,id,formdata = param.split(':',3)
+      lambda do |client|
+        fields = Command.parse_formdata formdata
+        form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit', fields)
+        puts "configuring #{fields.size} fields to accept transfer: #{jid}"
+        client.entity(jid).transfer.negotiation_reply(id,form)
+      end
+    when 'iq'
+      jid,iq_type,iq_id = param.split(':',3)
+      lambda do |client|
+        puts "sending iq (#{iq_type}/#{iq_id})"
+        args = {'to' => jid, 'type' => iq_type, 'id' => iq_id}
+        iq = client.iq_stanza(args)
+        client.send_stanza iq
+      end
+    when 'conversations'
+      lambda do |client|
+        client.conversations.keys.each do |conv|
+          puts conv
+        end
+      end
     else
       raise CommandParseError, "doesn't know such command: #{cmd}"
     end
@@ -452,6 +529,11 @@ module RosterClient
     puts "***** #{@jid} ready"
     user_data.each{|c| handle_command c}
     EM.open_keyboard Kb, self
+
+    # Writes a stack-trace on error
+    on_exception(:anything) do |ctx|
+      raise ctx['error']
+    end
 
 
     # Signal presence subscriptions
@@ -529,38 +611,96 @@ module RosterClient
     # Prints Pubsub event
     on_message do |ctx|
       event = ctx.bit(:pubsubevent)
+      delay = ctx.bit(:delay)
+      stamp = delay.stamp if delay
       if event
-        puts "=== PubSub event #{event.service} ==="
-        event.items.each do |i|
-          puts "+item> #{i.node} #{i.item_id} (by #{i.publisher || 'N/A'})"
-          puts i.payload
-        end
-        event.retractions.each do |r|
-          puts "-item> #{r.node} #{r.item_id}"
+        puts "=== PubSub event #{event.service} #{stamp} ==="
+        if event.items_node #oddly enough, retractions fall in items_node
+          items       = event.items
+          retractions = event.retractions
+
+          if items.any? or retractions.any?
+            items.each do |i|
+              puts "+item> #{i.node} #{i.item_id} (by #{i.publisher || 'N/A'})"
+              puts i.payload
+            end
+
+            event.retractions.each do |r|
+              puts "-item> #{r.node} #{r.item_id}"
+            end
+          else
+            puts "empty items list for #{event.node_id}"
+          end
         end
 
-        #wrong
+
         if event.purge
-          puts "node purged #{event.node_id}"
+          puts "node purged #{event.purge.node}"
         end
 
-        #wrong
         if event.deletion
-          puts "node destroyed #{event.node_id}"
+          del = event.deletion
+          puts "node destroyed #{del.node}"
+          puts "  now redirects to #{del.redirect}" if del.redirect
         end
 
-        #tocheck
         if event.configuration
           cfg = event.configuration
           puts "new node configuration for #{cfg.node}"
-          puts cfg.config
+          Command.print_dataform(ctx)
         end
 
-        #tocheck
-        if event.subscription
-          sub = event.subscription
+        ctx.done!
+      end
+
+      event = ctx.bit(:pubsub)
+      if event
+        puts "=== PubSub #{event.service} ==="
+        event.subscriptions.each do |sub|
           puts "subscription of #{sub.jid} (#{sub.sub_id}) status is now #{sub.subscription} for #{sub.node}"
           puts "expires on #{sub.expiry}" if sub.expiry
+        end
+        ctx.done!
+      end
+      ctx
+    end
+
+    on_iq do |ctx|
+      si =  ctx.bit(:streaminitiation)
+      if si
+        puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
+        puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
+        puts "description: #{si.description}" if si.description
+        Command.print_dataform ctx
+
+        ctx.done!
+      end
+      ctx
+    end
+
+    on_iq do |ctx|
+      ibb = ctx.bit(:ibb)
+      if ibb
+        key = ibb_conversation_key(ibb)
+
+        if ibb.open_node
+          ibb_dl_conversation(ctx,key) do |step|
+            step.on(:start) do
+              puts "=== FileTransfer IBB starting (sid: #{ibb.sid}) ==="
+            end
+            step.on(:cancel) do
+              puts "=== Canceled FileTransfer (sid: #{ibb.sid}) ==="
+            end
+            step.on(:chunk) do |state|
+              puts "=== Incoming chunk (#{state.last_chunk.size} bytes) (sid:#{ibb.sid})"
+            end
+            step.on(:done) do
+              puts "=== FileTransfer IBB done (sid: #{ibb.sid}) ==="
+            end
+          end
+        else
+          conv = conversation(key)
+          conv.resume ctx if conv
         end
         ctx.done!
       end
@@ -573,6 +713,127 @@ module RosterClient
     #TODO: correctly pick items from the jid/node name
     [EM::Xmpp::Context::Contexts::Discoitems::Item.new(jid.full, 'cmd:1','a first command'),
     EM::Xmpp::Context::Contexts::Discoitems::Item.new(jid.full, 'cmd:2','anoter command')]
+  end
+
+  def ibb_conversation_key(ibb)
+    ibb_conversation_key_for_sid ibb, ibb.sid
+  end
+
+  def ibb_conversation_key_for_sid(x,sid)
+    [ 'ibb', x.from , sid ].map(&:to_s).join('|')
+  end
+
+  IBBDLState = Struct.new(:buffer, :last_iq, :done, :last_chunk)
+  IBBULState = Struct.new(:jid, :sid, :chunk_size, :ptr, :chunk_idx, :done, :last_chunk, :closed)
+
+  def ibb_ul_conversation(initial_ctx,key,&blk)
+    path = initial_ctx.env['path']
+    sid  = initial_ctx.env['stream.id']
+    jid  = initial_ctx.env['peer']
+
+    #encode data
+    raw_data = File.read path
+    data     = Base64.strict_encode64 raw_data
+
+    state = IBBULState.new(jid,sid,4096,0,0,false,false,false)
+
+    start_conversation(initial_ctx,key,state) do |conv|
+      conv.prepare_callbacks(:start, :cancel, :chunk, :done, &blk)
+
+      catch :interrupt do 
+        # opens transfer
+        iq = iq_stanza(:type => 'set', 'to' => state.jid, 'id' => "tx.#{sid}.#{state.ptr}") do |xml|
+          xml.open('xmlns' => EM::Xmpp::Namespaces::IBB, 'block-size' => state.chunk_size, 'sid' => state.sid, 'stanza' => 'iq')
+        end
+        ret = conv.send_stanza iq, 10
+
+        if ret.interrupted?
+          rsp = ret.ctx.bit(:iq)
+          if rsp.type == 'error'
+            conv.callback :cancel
+            throw :interrupt
+          else
+            conv.callback :start
+          end
+        else
+          conv.callback :cancel
+          throw :interrupt
+        end
+
+        # uploads all chunk
+        until state.done or state.closed do
+          # send a chunk of encoded data and wait for an ack
+          blk = data.slice(state.ptr, state.chunk_size)
+          state.last_chunk = blk
+          iq = iq_stanza(:type => 'set', 'to' => state.jid, 'id' => "tx.#{sid}.#{state.ptr}") do |xml|
+            xml.data({'xmlns' => EM::Xmpp::Namespaces::IBB, 'sid' => state.sid, 'seq' => state.chunk_idx}, blk)
+          end
+
+          ret = conv.send_stanza iq
+          iq = ret.ctx.bit(:iq)
+          case iq.type 
+          when 'result'
+            #nothing
+          when 'set'
+            ibb = ret.ctx.bit(:ibb)
+            if ibb.close_node #other end closes, but there is still a non-acknowledge pending iq
+              conv.send_stanza iq.reply, 1
+              state.closed = true
+            end
+          else
+            conv.callback :cancel
+            throw :interrupt
+          end
+
+          conv.callback :chunk
+          state.ptr += state.chunk_size
+          state.chunk_idx += 1
+          state.done = true if state.ptr > data.size
+        end
+
+        unless state.closed
+          # notify the end of the IBB
+          iq = iq_stanza(:type => 'set', 'to' => state.jid) do |xml|
+            xml.close('xmlns' => EM::Xmpp::Namespaces::IBB, 'sid' => state.sid)
+          end
+          conv.send_stanza iq, 1
+        end
+
+        conv.callback :done
+      end # catch :interrupt
+    end
+  end
+
+  def ibb_dl_conversation(initial_ctx,key,&blk)
+    state = IBBDLState.new("", initial_ctx.bit(:iq), false, nil)
+
+    start_conversation(initial_ctx,key,state) do |conv|
+      conv.prepare_callbacks(:start, :cancel, :chunk, :done, &blk)
+
+      conv.callback :start
+
+      until state.done do
+        # ack last iq
+        send_stanza state.last_iq.reply
+
+        # expect some data chunk, may wait forever
+        chunk_ctx = conv.delay.ctx
+        chunk         = chunk_ctx.bit(:ibb)
+        state.last_iq = chunk_ctx.bit(:iq)
+
+        # we should either have a final node or some data
+        if chunk.close_node
+          state.done = true
+          conv.callback :done
+        else
+          state.last_chunk = chunk.data
+          state.buffer << chunk.data
+          conv.callback :chunk
+        end
+      end
+
+      send_stanza state.last_iq.reply
+    end
   end
 
   def stanza_end(stanza)

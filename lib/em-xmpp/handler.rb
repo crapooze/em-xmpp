@@ -43,6 +43,10 @@ module EM::Xmpp
         ctx.bit!(:error) if iq.error?
         ctx
       end
+      on_decorator('//xmlns:pubsub', 'xmlns' => PubSub) do |ctx|
+        ctx.bit!(:pubsub)
+        ctx
+      end
       on_decorator('//xmlns:event', 'xmlns' => PubSubEvent) do |ctx|
         ctx.bit!(:pubsubevent)
         ctx
@@ -81,6 +85,10 @@ module EM::Xmpp
       end
       on_decorator('//xmlns:si', 'xmlns' => StreamInitiation) do |ctx|
         ctx.bit!(:streaminitiation)
+        ctx
+      end
+      on_decorator('//xmlns:open | //xmlns:data | //xmlns:close', 'xmlns' => IBB) do |ctx|
+        ctx.bit!(:ibb)
         ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => ByteStreams) do |ctx|

@@ -644,14 +644,32 @@ module EM::Xmpp
         end
       end
 
+      module Featurenegotiation
+        include Dataforms
+        def feature_node
+          xpath('//xmlns:feature',{'xmnls' => Namespaces::FeatureNeg})
+        end
+      end
+
       module Streaminitiation
         include Iq
-        include Dataforms
+        include Featurenegotiation
         def si_node
           xpath('//xmlns:si',{'xmlns' => Namespaces::StreamInitiation}).first
         end
         def file_node
           xpath('//xmlns:file',{'xmlns' => Namespaces::FileTransfer}).first
+        end
+        def range_node
+          xpath('//xmlns:range',{'xmlns' => Namespaces::FileTransfer}).first
+        end
+        def range_length
+          n = range_node
+          read_attr(n, 'length') {|x| Integer(x)} if n
+        end
+        def range_offset
+          n = range_node
+          read_attr(n, 'offset') {|x| Integer(x)} if n
         end
         def mime_type
           n = si_node
@@ -681,7 +699,6 @@ module EM::Xmpp
           n = file_node
           n.children.find{|n| n.name == 'range'} if n
         end
-        # TODO: range on requests
         def description
           n = file_node
           if n
@@ -698,6 +715,39 @@ module EM::Xmpp
         end
       end
 
+      module Ibb
+        include IncomingStanza
+        def open_node
+          xpath('//xmlns:open',{'xmlns' => Namespaces::IBB}).first
+        end
+        def data_node
+          xpath('//xmlns:data',{'xmlns' => Namespaces::IBB}).first
+        end
+        def close_node
+          xpath('//xmlns:close',{'xmlns' => Namespaces::IBB}).first
+        end
+        def block_size
+          n = open_node
+          read_attr(n,'block-size'){|x| Integer(x)} if n
+        end
+        def sid
+          n = open_node || data_node || close_node
+          read_attr(n,'sid') if n
+        end
+        def seq
+          n = data_node
+          read_attr(n,'seq') if n
+        end
+        def stanza_type
+          n = open_node
+          read_attr(n,'stanza') if n
+        end
+        def data
+          n = data_node
+          n.content if n
+        end
+      end
+
       module PubsubMain
         include IncomingStanza
         Subscription = Struct.new(:jid, :node, :subscription, :sub_id, :expiry)
@@ -707,17 +757,24 @@ module EM::Xmpp
         Deletion     = Struct.new(:node, :redirect)
         Configuration= Struct.new(:node, :config)
         Purge        = Struct.new(:node)
+
+        def service
+          from.jid
+        end
       end
 
       module Pubsubevent
         include PubsubMain
-        def service
-          from.jid
-        end
 
         def node_id
+          ret = nil
           n = event_node
-          read_attr(n, 'node') if n
+          ret = read_attr(n, 'node') if n
+          unless ret
+            n = items_node
+            ret = read_attr(n, 'node') if n
+          end
+          ret
         end
 
         def event_node
@@ -731,8 +788,8 @@ module EM::Xmpp
         end
         def items
           node = items_node
-          node_id = read_attr(node, 'node')
           if node
+            node_id = read_attr(node, 'node')
             node.xpath(".//xmlns:item",{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).map do |n|
               item_id = read_attr n, 'id'
               publisher = read_attr n, 'publisher'
@@ -744,8 +801,8 @@ module EM::Xmpp
         end
         def retractions
           node = items_node
-          node_id = read_attr(node, 'node')
           if node
+            node_id = read_attr(node, 'node')
             node.xpath(".//xmlns:retract",{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).map do |n|
               item_id = read_attr n, 'id'
               Retraction.new(node_id, item_id)
@@ -758,33 +815,15 @@ module EM::Xmpp
         def purge_node
           n = event_node
           if n
-            p "got event node"
-            puts n
             n.xpath('//xmlns:purge',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
           end
         end
 
         def purge
           node = purge_node
-          Purge.new(node.node_id) if node
-        end
-
-        def subscription_node
-          n = event_node
-          if n
-            n.xpath('//xmlns:subscription',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
-          end
-        end
-
-        def subscription
-          node = subscription_node
           if node
             node_id = read_attr(node, 'node')
-            jid = read_attr(node, 'jid') {|x| connection.entity x}
-            subscription = read_attr(node, 'subscription')
-            sub_id = read_attr(node,'subid')
-            expiry = read_attr(node,'expiry'){|x| Date.parse x}
-            Subscription.new(jid, node_id, subscription, sub_id, expiry)
+            Purge.new(node_id) if node
           end
         end
 
@@ -798,7 +837,8 @@ module EM::Xmpp
         def configuration
           node = configuration_node
           if node
-            Configuration.new(node.node_id, node.children) #TODO: maybe look for the dataform
+            node_id = read_attr(node, 'node')
+            Configuration.new(node_id, node.children)
           end
         end
 
@@ -812,9 +852,10 @@ module EM::Xmpp
         def deletion
           node = deletion_node
           if node
-            r = node.xpath('//xmlns:redirect',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent})
+            node_id = read_attr(node, 'node')
+            r = node.xpath('//xmlns:redirect',{'xmlns' => EM::Xmpp::Namespaces::PubSubEvent}).first
             uri = read_attr(r, 'uri') if r
-            Deletion.new(node.node_id, uri)
+            Deletion.new(node_id, uri)
           end
         end
       end
@@ -834,7 +875,7 @@ module EM::Xmpp
           end
         end
         def subscriptions
-          node = subscriptions_container_node
+          node = subscriptions_container_node || pubsub_node
           if node
             node.xpath('//xmlns:subscription',{'xmlns' => EM::Xmpp::Namespaces::PubSub}).map do |n|
               node_id = read_attr n, 'node'
@@ -1075,6 +1116,9 @@ module EM::Xmpp
       end
       class Streaminitiation < Bit
         include Contexts::Streaminitiation
+      end
+      class Ibb < Bit
+        include Contexts::Ibb
       end
       class Pubsub < Bit
         include Contexts::Pubsub
