@@ -1,0 +1,4 @@
+
+class CommandParseError < ArgumentError
+end
+
