@@ -238,6 +238,15 @@ module Command extend self
         Command.print_context_dataforms ctx
       end
 
+    when 'pubsub-configure-node'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        ctx = client.entity(jid).pubsub(node).configuration_options
+        client.default_dataform_conversation(ctx,"=== Configuring PubSub node ===") do |state|
+          client.entity(jid).pubsub(node).configure(state.answers)
+        end
+      end
+
     when 'pubsub-node-default-options'
       jid,node = param.split(':',2)
       lambda do |client|
@@ -247,7 +256,7 @@ module Command extend self
         Command.print_context_dataforms ctx
       end
 
-    when 'pubsub-configure-node'
+    when 'pubsub-send-node-configuration'
       jid,node,formdata = param.split(':',3)
       lambda do |client|
         fields = Command.parse_formdata formdata
@@ -638,53 +647,9 @@ module RosterClient
         puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
-        ctx.env['dataform'] = ctx.bit!(:dataforms).form
-        dataform_conversation(ctx) do |step|
-          step.on(:start) do
-            puts "Negotiating stream"
-          end
 
-          step.on(:confirm) do |state|
-            puts "Ready to submit:"
-            Command.print_dataform state.answers
-            puts "Submit? Y/n"
-          end
-
-          step.on(:user_answer) do |state|
-            values = [state.user_input]
-            response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
-            state.answers.fields << response_field
-          end
-
-          step.on(:ask) do |state|
-            fidx  = state.current_idx
-            field = state.current_field
-
-            puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
-            letter = 'a'
-            field.options.each do |opt| 
-              puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
-              letter = letter.succ
-            end
-
-            if field.values.any?
-              puts "Currently:"
-              field.values.each do |val| 
-                puts "#{val}"
-                letter = letter.succ
-              end
-            end
-            puts "Enter your choice:"
-          end
-
-          step.on(:submit) do |state|
-            if state.user_input == 'n'
-              puts "cancelling"
-              send_stanza si.reply(:type => 'error')
-            else
-              si.from.transfer.negotiation_reply(si.id, state.answers)
-            end
-          end
+        default_dataform_conversation(ctx, "Negotiating stream") do |state|
+          si.from.transfer.negotiation_reply(si.id, state.answers)
         end
 
         ctx.done!
@@ -872,6 +837,57 @@ module RosterClient
     end
   end
 
+  def default_dataform_conversation(ctx, banner, &action)
+    ctx.env['dataform'] = ctx.bit!(:dataforms).form
+    dataform_conversation(ctx) do |step|
+      step.on(:start) do
+        puts banner
+      end
+
+      step.on(:confirm) do |state|
+        puts "Ready to submit:"
+        Command.print_dataform state.answers
+        puts "Submit? Y/n"
+      end
+
+      step.on(:user_answer) do |state|
+        values = [state.user_input]
+        response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+        state.answers.fields << response_field
+      end
+
+      step.on(:ask) do |state|
+        fidx  = state.current_idx
+        field = state.current_field
+
+        puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
+        letter = 'a'
+        field.options.each do |opt| 
+          puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+          letter = letter.succ
+        end
+
+        if field.values.any?
+          puts "Currently:"
+          field.values.each do |val| 
+            puts "#{val}"
+            letter = letter.succ
+          end
+        end
+        puts "Enter your choice:"
+      end
+
+      step.on(:submit) do |state|
+        if state.user_input == 'n'
+          puts "Cancelled"
+        else
+          puts "Proceeding"
+          action.call(state)
+        end
+      end
+    end
+  end
+
   def stanza_end(stanza)
     puts stanza if @show_xml
     super
@@ -882,7 +898,7 @@ module RosterClient
       if conversation(:dataform)
         conversation(:dataform).resume str
       else
-        Command.for(str).call self
+        Command.for(str).call self unless str.empty?
       end
     rescue CommandParseError
       puts "could not parse #{str}"
@@ -919,7 +935,7 @@ class Kb < EM::Connection
     @client = client
   end
   def receive_line line
-    Fiber.new { @client.handle_command line unless line.empty?}.resume
+    Fiber.new { @client.handle_command line.chomp}.resume
   end
 end
 
