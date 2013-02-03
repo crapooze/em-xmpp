@@ -349,7 +349,7 @@ module EM::Xmpp
       end
 
       module Dataforms
-        Form  = Struct.new(:type, :fields)
+        Form  = Struct.new(:type, :fields, :title, :instructions)
         Field = Struct.new(:var, :type, :label, :values, :options) do
           def value
             values.first
@@ -363,6 +363,12 @@ module EM::Xmpp
 
         def x_forms
           x_form_nodes.map do |form|
+            instruction_node = form.xpath('xmlns:instructions',{'xmlns' => Namespaces::DataForms}).first
+            title_node = form.xpath('xmlns:title',{'xmlns' => Namespaces::DataForms}).first
+
+            instr = instruction_node.content if instruction_node
+            title = title_node.content if instruction_node
+
             form_type = read_attr(form, 'type')
             field_nodes = form.xpath('xmlns:field',{'xmlns' => Namespaces::DataForms})
             fields = field_nodes.map do |field|
@@ -382,8 +388,12 @@ module EM::Xmpp
 
               Field.new(var,type,label,values,options)
             end
-            Form.new form_type, fields
+            Form.new form_type, fields, title, instr
           end
+        end
+
+        def form
+          x_forms.first
         end
       end
 

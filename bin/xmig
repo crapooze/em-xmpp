@@ -27,22 +27,28 @@ module Command extend self
     end
   end
 
-  def print_dataform(ctx)
+  def print_dataform(form)
+    puts "# #{form.title}" if form.title
+    puts "#{form.instructions}" if form.instructions
+    form.fields.each_with_index do |field,fidx|
+      puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
+      letter = 'a'
+      field.options.each do |opt| 
+        puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+        letter = letter.succ
+      end
+      puts "Currently:"
+      field.values.each do |val| 
+        puts "#{val}"
+        letter = letter.succ
+      end
+    end
+  end
+
+  def print_context_dataforms(ctx)
     df = ctx.bit!(:dataforms)
     df.x_forms.each do |form|
-      form.fields.each_with_index do |field,fidx|
-        puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
-        letter = 'a'
-        field.options.each do |opt| 
-          puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
-          letter = letter.succ
-        end
-        puts "Currently:"
-        field.values.each do |val| 
-          puts "#{val}"
-          letter = letter.succ
-        end
-      end
+      print_dataform form
     end
   end
 
@@ -141,7 +147,7 @@ module Command extend self
         puts "listing options of subscription on: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).subscription_options(subid)
         puts "=== PubSub subscription options form ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
     when 'pubsub-subscription-default-options'
       jid,node = param.split(':',2)
@@ -151,7 +157,7 @@ module Command extend self
         entity = entity.node(node) if node
         ctx = entity.default_subscription_configuration
         puts "=== PubSub default subscription options ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
     when 'pubsub-configure-subscription'
       jid,node,formdata = param.split(':',3)
@@ -229,7 +235,7 @@ module Command extend self
         puts "listing PubSub node configuration options: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).configuration_options
         puts "=== PubSub node configuration options form ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
 
     when 'pubsub-node-default-options'
@@ -238,7 +244,7 @@ module Command extend self
         puts "listing default PubSub node configuration options: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).default_configuration
         puts "=== PubSub default node configuration options form ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
 
     when 'pubsub-configure-node'
@@ -608,7 +614,7 @@ module RosterClient
         if event.configuration
           cfg = event.configuration
           puts "new node configuration for #{cfg.node}"
-          Command.print_dataform(ctx)
+          Command.print_context_dataforms(ctx)
         end
 
         ctx.done!
@@ -632,7 +638,49 @@ module RosterClient
         puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
+        ctx.env['dataform'] = ctx.bit!(:dataforms).form
+        dataform_conversation(ctx) do |step|
+          step.on(:start) do
+            puts "=== #{si.from} wants to send you a file ==="
+          end
+
+          step.on(:confirm) do |state|
+            puts "Ready to submit:"
+            Command.print_dataform state.answers
+            puts "Submit? Y/n"
+          end
+
+          step.on(:ask) do |state|
+            fidx  = state.current_idx
+            field = state.current_field
+
+            puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
+            letter = 'a'
+            field.options.each do |opt| 
+              puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+              letter = letter.succ
+            end
+
+            if field.values.any?
+              puts "Currently:"
+              field.values.each do |val| 
+                puts "#{val}"
+                letter = letter.succ
+              end
+            end
+            puts "Enter your choice:"
+          end
+
+          step.on(:submit) do |state|
+            si.from.transfer.negotiation_reply(si.id, state.answers)
+          end
+
+          step.on(:cancel) do
+            puts "cancelled"
+            #TODO: send iq/si refusing transfer
+          end
+        end
 
         ctx.done!
       end
@@ -790,6 +838,39 @@ module RosterClient
     end
   end
 
+  DataFormState = Struct.new(:form, :answers, :current_idx) do
+    def current_field
+      form.fields[current_idx]
+    end
+  end
+
+  def dataform_conversation(initial_ctx,&blk)
+    form = initial_ctx.env['dataform']
+    answers = EM::Xmpp::Context::Contexts::Dataforms::Form.new('submit',[],nil,nil)
+    state = DataFormState.new(form, answers, 0)
+
+    start_conversation(initial_ctx,:dataform,state) do |conv|
+      conv.prepare_callbacks(:start, :ask, :confirm, :submit, :cancel, &blk)
+
+      conv.callback(:start)
+      state.form.fields.each_with_index do |field,fidx|
+        state.current_idx = fidx
+        conv.callback(:ask)
+        user_input = conv.delay.ctx
+        values = [user_input]
+        response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(field.var,nil,nil,values,[])
+        state.answers.fields << response_field
+      end
+
+      conv.callback(:confirm)
+      user_input = conv.delay.ctx
+      if user_input == 'n'
+        conv.callback(:cancel)
+      else
+        conv.callback(:submit)
+      end
+    end
+  end
 
   def stanza_end(stanza)
     puts stanza if @show_xml
@@ -798,7 +879,11 @@ module RosterClient
 
   def handle_command(str)
     begin
-      Command.for(str).call self
+      if conversation(:dataform)
+        conversation(:dataform).resume str
+      else
+        Command.for(str).call self
+      end
     rescue CommandParseError
       puts "could not parse #{str}"
     end
