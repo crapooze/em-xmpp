@@ -437,7 +437,7 @@ module Command extend self
       end
 
       # file-transfer
-    when 'propose-transfer'
+    when 'send-file'
       jid,path,txt,formdata = param.split(':',3)
       sid = "ft_#{rand(65535)}"
       lambda do |client|
@@ -474,11 +474,10 @@ module Command extend self
                 puts "=== Starting Upload ==="
               end
               step.on(:cancel) do
-                raise RuntimeError, 'cancel'
+                puts "=== Upload canceled ==="
               end
               step.on(:chunk) do |state|
                 puts "=== Outgoing chunk #{state.last_chunk.size} bytes ==="
-                puts state.last_chunk
               end
               step.on(:done) do
                 puts "=== Upload Finished ==="
@@ -491,7 +490,7 @@ module Command extend self
           puts "refused"
         end
       end
-    when 'accept-transfer'
+    when 'receive-file'
       jid,id,formdata = param.split(':',3)
       lambda do |client|
         fields = Command.parse_formdata formdata
@@ -644,7 +643,6 @@ module RosterClient
       ibb = ctx.bit(:ibb)
       if ibb
         key = ibb_conversation_key(ibb)
-        p "**trying to resume conv #{key}**"
 
         if ibb.open_node
           ibb_dl_conversation(ctx,key) do |step|
@@ -652,7 +650,7 @@ module RosterClient
               puts "=== FileTransfer IBB starting (sid: #{ibb.sid}) ==="
             end
             step.on(:cancel) do
-              raise RuntimeError, 'cancel'
+              puts "=== Canceled FileTransfer (sid: #{ibb.sid}) ==="
             end
             step.on(:chunk) do |state|
               puts "=== Incoming chunk (#{state.last_chunk.size} bytes) (sid:#{ibb.sid})"
@@ -680,7 +678,7 @@ module RosterClient
   end
 
   IBBDLState = Struct.new(:buffer, :last_iq, :done, :last_chunk)
-  IBBULState = Struct.new(:jid, :sid, :chunk_size, :ptr, :chunk_idx, :done, :last_chunk)
+  IBBULState = Struct.new(:jid, :sid, :chunk_size, :ptr, :chunk_idx, :done, :last_chunk, :closed)
 
   def ibb_ul_conversation(initial_ctx,key,&blk)
     path = initial_ctx.env['path']
@@ -691,7 +689,7 @@ module RosterClient
     raw_data = File.read path
     data     = Base64.strict_encode64 raw_data
 
-    state = IBBULState.new(jid,sid,4096,0,0,false)
+    state = IBBULState.new(jid,sid,4096,0,0,false,false,false)
 
     start_conversation(initial_ctx,key,state) do |conv|
       conv.prepare_callbacks(:start, :cancel, :chunk, :done, &blk)
@@ -717,7 +715,7 @@ module RosterClient
         end
 
         # uploads all chunk
-        until state.done do
+        until state.done or state.closed do
           # send a chunk of encoded data and wait for an ack
           blk = data.slice(state.ptr, state.chunk_size)
           state.last_chunk = blk
@@ -726,7 +724,17 @@ module RosterClient
           end
 
           ret = conv.send_stanza iq
-          unless ret.ctx.bit(:iq).type == 'result'
+          iq = ret.ctx.bit(:iq)
+          case iq.type 
+          when 'result'
+            #nothing
+          when 'set'
+            ibb = ret.ctx.bit(:ibb)
+            if ibb.close_node #other end closes, but there is still a non-acknowledge pending iq
+              conv.send_stanza iq.reply, 1
+              state.closed = true
+            end
+          else
             conv.callback :cancel
             throw :interrupt
           end
@@ -737,13 +745,16 @@ module RosterClient
           state.done = true if state.ptr > data.size
         end
 
-        # notify the end of the IBB
-        iq = iq_stanza(:type => 'set', 'to' => state.jid) do |xml|
-          xml.close('xmlns' => EM::Xmpp::Namespaces::IBB, 'sid' => state.sid)
+        unless state.closed
+          # notify the end of the IBB
+          iq = iq_stanza(:type => 'set', 'to' => state.jid) do |xml|
+            xml.close('xmlns' => EM::Xmpp::Namespaces::IBB, 'sid' => state.sid)
+          end
+          conv.send_stanza iq, 1
         end
-        ret = conv.send_stanza iq
+
         conv.callback :done
-      end
+      end # catch :interrupt
     end
   end
 
