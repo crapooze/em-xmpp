@@ -847,36 +847,42 @@ module RosterClient
     state = DataFormState.new(form, answers, 0, nil)
 
     start_conversation(initial_ctx,:dataform,state) do |conv|
-      conv.prepare_callbacks(:start, :ask, :user_answer, :confirm, :submit, &blk)
+      conv.prepare_callbacks(:start, :ask, :user_answer, :confirm, :submit, :cancel, &blk)
+      finalize = :submit
 
       conv.callback(:start)
-      fields = state.form.fields.dup
-      
-      cnt = fields.size
-      idx = 0
-      until (idx + 1) > cnt
-        state.current_idx = idx
-        conv.callback(:ask)
-        state.user_input = conv.delay.ctx
-        cb_action = conv.callback(:user_answer)
-        state.user_input = nil
 
-        case cb_action 
-        when :previous
-          idx -= 1
-          idx = [0,idx].max
-        when :next, :modified
-          idx += 1
-        when :repeat
-          #don't touch index
-        else
-          raise RuntimeError, "no such data-form action: #{cb_action}"
+      catch :cancel do
+        fields = state.form.fields.dup
+        cnt = fields.size
+        idx = 0
+        until (idx + 1) > cnt
+          state.current_idx = idx
+          conv.callback(:ask)
+          state.user_input = conv.delay.ctx
+          cb_action = conv.callback(:user_answer)
+          state.user_input = nil
+
+          case cb_action 
+          when :previous
+            idx -= 1
+            idx = [0,idx].max
+          when :next, :modified
+            idx += 1
+          when :repeat
+            #don't touch index
+          when :cancel
+            finalize = :cancel
+            throw :cancel
+          else
+            raise RuntimeError, "no such data-form action: #{cb_action}"
+          end
         end
-      end
 
-      conv.callback(:confirm)
-      state.user_input = conv.delay.ctx
-      conv.callback(:submit)
+        conv.callback(:confirm)
+        state.user_input = conv.delay.ctx
+      end
+      conv.callback(finalize)
     end
   end
 
@@ -896,6 +902,8 @@ module RosterClient
       step.on(:user_answer) do |state|
         txt = state.user_input
         case txt 
+        when ':cancel'
+          :cancel
         when ':prev',':previous'
           :previous
         when ':next',''
@@ -958,6 +966,11 @@ module RosterClient
           puts "Proceeding"
           action.call(true, state)
         end
+      end
+
+      step.on(:cancel) do |state|
+        puts "Cancelled"
+        action.call(false, state)
       end
     end
   end
