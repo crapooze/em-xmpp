@@ -867,6 +867,8 @@ module RosterClient
           idx = [0,idx].max
         when :next, :modified
           idx += 1
+        when :repeat
+          #don't touch index
         else
           raise RuntimeError, "no such data-form action: #{cb_action}"
         end
@@ -901,6 +903,24 @@ module RosterClient
           response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
           state.answers.fields[state.current_idx] = response_field
           :next
+        when /^:\d+\.(\w+)$/ #answers to a question by response ID
+          option_code = Regexp.last_match[1]
+          field = state.current_field
+          letter = 'a'
+          opt = field.options.find do |o|
+            found   = letter == option_code
+            letter  = letter.succ
+            found
+          end
+
+          if opt
+            values = [opt.value]
+            response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+            state.answers.fields[state.current_idx] = response_field
+            :modified
+          else
+            :repeat
+          end
         else
           values = [txt]
           response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
