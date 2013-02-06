@@ -244,6 +244,14 @@ module EM::Xmpp
         end
       end
 
+      module Attention
+        include Message
+        def attention_node
+          xpath('//xmlns:attention',{'xmlns' => EM::Xmpp::Namespaces::Attention}).first
+        end
+      end
+
+
       module Iq
         include IncomingStanza
         def reply_default_params
@@ -1071,6 +1079,9 @@ module EM::Xmpp
       end
       class Message < Bit
         include Contexts::Message
+      end
+      class Attention < Bit
+        include Contexts::Attention
       end
       class Iq < Bit
         include Contexts::Iq

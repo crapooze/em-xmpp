@@ -325,6 +325,14 @@ module Command extend self
         client.entity(dst).say(msg)
       end
 
+    when 'buzzmsg'
+      dst,msg = param.split(':',2)
+      lambda do |client|
+        puts "speaking to: #{dst}"
+        client.entity(dst).say(msg,'chat',lambda{|xml| xml.attention(:xmlns => EM::Xmpp::Namespaces::Attention)})
+      end
+
+
     when 'gsay', 'gtell', 'gmsg'
       dst,msg = param.split(':',2)
       lambda do |client|
