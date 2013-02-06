@@ -37,9 +37,8 @@ module Command extend self
         puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
         letter = letter.succ
       end
-      puts "Currently:"
       field.values.each do |val| 
-        puts "#{val}"
+        puts "> #{val}"
         letter = letter.succ
       end
     end
@@ -824,6 +823,22 @@ module RosterClient
     def current_field
       form.fields[current_idx]
     end
+
+    def current_values
+      current_field.values
+    end
+
+    def current_answer
+      answers.fields[current_idx]
+    end
+
+    def current_response_values
+      if current_answer
+        current_answer.values 
+      else
+        current_values
+      end
+    end
   end
 
   def dataform_conversation(initial_ctx,&blk)
@@ -835,12 +850,26 @@ module RosterClient
       conv.prepare_callbacks(:start, :ask, :user_answer, :confirm, :submit, &blk)
 
       conv.callback(:start)
-      state.form.fields.each_with_index do |field,idx|
+      fields = state.form.fields.dup
+      
+      cnt = fields.size
+      idx = 0
+      until (idx + 1) > cnt
         state.current_idx = idx
         conv.callback(:ask)
         state.user_input = conv.delay.ctx
-        conv.callback(:user_answer)
+        cb_action = conv.callback(:user_answer)
         state.user_input = nil
+
+        case cb_action 
+        when :previous
+          idx -= 1
+          idx = [0,idx].max
+        when :next, :modified
+          idx += 1
+        else
+          raise RuntimeError, "no such data-form action: #{cb_action}"
+        end
       end
 
       conv.callback(:confirm)
@@ -863,25 +892,37 @@ module RosterClient
       end
 
       step.on(:user_answer) do |state|
-        values = [state.user_input]
-        response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
-        state.answers.fields << response_field
+        txt = state.user_input
+        case txt 
+        when ':prev',':previous'
+          :previous
+        when ':next',''
+          values = state.current_response_values
+          response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+          state.answers.fields[state.current_idx] = response_field
+          :next
+        else
+          values = [txt]
+          response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+          state.answers.fields[state.current_idx] = response_field
+          :modified
+        end
       end
 
       step.on(:ask) do |state|
         fidx  = state.current_idx
         field = state.current_field
 
-        puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
+        puts "#{fidx+1}/#{state.form.fields.count}) #{field.label || '_'} (#{field.var}/#{field.type})"
         letter = 'a'
         field.options.each do |opt| 
-          puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+          puts "#{fidx+1}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
           letter = letter.succ
         end
 
-        if field.values.any?
-          puts "Currently:"
-          field.values.each do |val| 
+        if state.current_response_values.any?
+          puts "Current response value:"
+          state.current_response_values.each do |val| 
             puts "#{val}"
             letter = letter.succ
           end
