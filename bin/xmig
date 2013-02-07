@@ -331,6 +331,37 @@ module Command extend self
         client.entity(dst).say(msg,'chat',lambda{|xml| xml.attention(:xmlns => EM::Xmpp::Namespaces::Attention)})
       end
 
+    when 'smiley'
+      dst,path,mime = param.split(':',2)
+      lambda do |client|
+        mime ||= "image/png" #TODO get mime
+        dat = File.read(path)
+        item = EM::Xmpp::Context::Contexts::Bob::Item.new(client.jid,dat,mime,65535)
+
+        puts "sending smiley to: #{dst}"
+        xmlproc = lambda do |xml| 
+          xml.body "smiley"
+          xml.html(:xmlns => EM::Xmpp::Namespaces::XhtmlIM) do |html|
+            html.body(:xmlns => 'http://www.w3.org/1999/xhtml') do |body|
+              body.img('alt' => 'smiley', 'src'=>"cid:#{item.cid}")
+            end
+          end
+        end
+
+        client.entity(dst).say("",'chat', xmlproc)
+        client.on_iq do |ctx|
+          bob = ctx.bit(:bob)
+          if bob and (bob.cid == item.cid)
+            puts "sending bob"
+            iq = bob.reply(item)
+            client.send_stanza iq
+            ctx.delete_xpath_handler!
+            ctx.done!
+          end
+          ctx
+        end
+      end
+
 
     when 'gsay', 'gtell', 'gmsg'
       dst,msg = param.split(':',2)

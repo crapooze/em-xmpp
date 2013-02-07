@@ -2,6 +2,8 @@
 require 'em-xmpp/jid'
 require 'em-xmpp/entity'
 require 'em-xmpp/namespaces'
+require 'base64'
+require 'digest/sha1'
 require 'time'
 require 'date'
 require 'ostruct'
@@ -723,6 +725,54 @@ module EM::Xmpp
         end
       end
 
+      module Bob
+        include Iq
+        Item = Struct.new(:jid, :data, :mime, :max_age) do
+          def sha1
+            Digest::SHA1.hexdigest data
+          end
+          def cid
+            "sha1+#{sha1}@#{jid}"
+          end
+          def b64
+            Base64.strict_encode64 data
+          end
+        end
+
+        def reply(item,*args)
+          ref = "cid:#{item.cid}"
+          params = {}
+          params['max-age'] = item.max_age if item.max_age
+          super(*args) do |xml|
+            xml.data({:xmlns => EM::Xmpp::Namespaces::BoB, :cid => ref, :type => item.mime}.merge(params), item.b64)
+            yield xml if block_given?
+          end
+        end
+
+        def data_node
+          xpath('//xmlns:data',{'xmlns' => Namespaces::BoB}).first
+        end
+        def cid
+          n = data_node
+          read_attr(n, 'cid') if n
+        end
+        def max_age
+          n = data_node
+          read_attr(n, 'max-age'){|x| Integer(x)} if n
+        end
+        def mime_type
+          n = data_node
+          read_attr(n, 'type') if n
+        end
+        def raw_data
+          n = data_node
+          n.content if n
+        end
+        def data
+          Base64.strict_decode raw_data if raw_data
+        end
+      end
+
       module Ibb
         include IncomingStanza
         def open_node
@@ -1127,6 +1177,9 @@ module EM::Xmpp
       end
       class Streaminitiation < Bit
         include Contexts::Streaminitiation
+      end
+      class Bob < Bit
+        include Contexts::Bob
       end
       class Ibb < Bit
         include Contexts::Ibb

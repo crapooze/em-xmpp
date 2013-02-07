@@ -63,6 +63,8 @@ module EM::Xmpp
     MucRoomconfig = 'http://jabber.org/protocol/muc#roomconfig'
     #Stream initiation offer
     StreamInitiation = 'http://jabber.org/protocol/si'
+    #Bits of Binary (bob)
+    BoB = 'urn:xmpp:bob'
     #In-Band Bytestreams
     IBB = 'http://jabber.org/protocol/ibb'
     #FileTransfer
@@ -73,5 +75,7 @@ module EM::Xmpp
     ByteStreams = 'http://jabber.org/protocol/bytestreams'
     #Extension for Fast byte stream transfers
     FastByteStreams = 'http://affinix.com/jabber/stream'
+    #xhtml-im
+    XhtmlIM = 'http://jabber.org/protocol/xhtml-im'
   end
 end

@@ -71,6 +71,10 @@ module EM::Xmpp
         ctx.bit!(:command)
         ctx
       end
+      on_decorator('//xmlns:data', 'xmlns' => BoB) do |ctx|
+        ctx.bit!(:bob)
+        ctx
+      end
       on_decorator('//xmlns:x', 'xmlns' => DataForms) do |ctx|
         ctx.bit!(:dataforms)
         ctx
