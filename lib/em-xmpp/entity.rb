@@ -145,6 +145,11 @@ module EM::Xmpp
       Transfer.new(connection, jid)
     end
 
+    # returns an entity to communicate with the Avatar service
+    def avatar
+      Avatar.new(connection, jid.bare)
+    end
+
     class Transfer < Entity
       def self.describe_file(path)
         ret = {}
@@ -187,6 +192,66 @@ module EM::Xmpp
           end
         end
         connection.send_stanza iq
+      end
+    end
+
+    class Avatar < Entity
+      Item = Struct.new(:sha1, :data, :width, :height, :mime) do
+        def id
+          sha1 || Digest::SHA1.hexdigest(data)
+        end
+        def b64
+          Base64.strict_encode64 data
+        end
+        def bytes
+          data.size
+        end
+      end
+
+      def publish(item)
+        publish_data item
+        publish_metadata item
+      end
+
+      def publish_data(item)
+        iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
+            pubsub.publish(:node => EM::Xmpp::Namespaces::AvatarData) do |pub|
+              pub.item(:id => item.id) do |i|
+                i.data({:xmnls => EM::Xmpp::Namespaces::AvatarData}, item.b64)
+              end
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+
+      def publish_metadata(item)
+        iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
+            pubsub.publish(:node => EM::Xmpp::Namespaces::AvatarMetaData) do |pub|
+              pub.item(:id => item.id) do |i|
+                i.metadata({:xmnls => EM::Xmpp::Namespaces::AvatarMetaData}) do |md|
+                  md.info(:width => item.width, :height => item.height, :bytes => item.bytes, :type => item.mime, :id => item.id)
+                end
+              end
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
+      end
+      
+      def remove
+        iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
+          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
+            pubsub.publish(:node => EM::Xmpp::Namespaces::AvatarMetaData) do |pub|
+              pub.item(:id => "current") do |i|
+                i.metadata(:xmlns => EM::Xmpp::Namespaces::AvatarMetaData)
+              end
+            end
+          end
+        end
+        send_iq_stanza_fibered iq
       end
     end
 

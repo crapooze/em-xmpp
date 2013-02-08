@@ -25,6 +25,11 @@ module EM::Xmpp
     Roster = 'jabber:iq:roster'
     #XMPP commands
     Commands = "http://jabber.org/protocol/commands"
+    #avatar
+    AvatarData     = "urn:xmpp:avatar:data"
+    AvatarMetaData = "urn:xmpp:avatar:metadata"
+    #attention
+    Attention = "urn:xmpp:attention:0"
     #entity nicknames
     Nick = "http://jabber.org/protocol/nick"
     #entity activity
@@ -61,6 +66,8 @@ module EM::Xmpp
     MucRoomconfig = 'http://jabber.org/protocol/muc#roomconfig'
     #Stream initiation offer
     StreamInitiation = 'http://jabber.org/protocol/si'
+    #Bits of Binary (bob)
+    BoB = 'urn:xmpp:bob'
     #In-Band Bytestreams
     IBB = 'http://jabber.org/protocol/ibb'
     #FileTransfer
@@ -71,5 +78,7 @@ module EM::Xmpp
     ByteStreams = 'http://jabber.org/protocol/bytestreams'
     #Extension for Fast byte stream transfers
     FastByteStreams = 'http://affinix.com/jabber/stream'
+    #xhtml-im
+    XhtmlIM = 'http://jabber.org/protocol/xhtml-im'
   end
 end

@@ -2,6 +2,8 @@
 require 'em-xmpp/jid'
 require 'em-xmpp/entity'
 require 'em-xmpp/namespaces'
+require 'base64'
+require 'digest/sha1'
 require 'time'
 require 'date'
 require 'ostruct'
@@ -244,6 +246,14 @@ module EM::Xmpp
         end
       end
 
+      module Attention
+        include Message
+        def attention_node
+          xpath('//xmlns:attention',{'xmlns' => EM::Xmpp::Namespaces::Attention}).first
+        end
+      end
+
+
       module Iq
         include IncomingStanza
         def reply_default_params
@@ -359,7 +369,7 @@ module EM::Xmpp
       end
 
       module Dataforms
-        Form  = Struct.new(:type, :fields)
+        Form  = Struct.new(:type, :fields, :title, :instructions)
         Field = Struct.new(:var, :type, :label, :values, :options) do
           def value
             values.first
@@ -373,6 +383,12 @@ module EM::Xmpp
 
         def x_forms
           x_form_nodes.map do |form|
+            instruction_node = form.xpath('xmlns:instructions',{'xmlns' => Namespaces::DataForms}).first
+            title_node = form.xpath('xmlns:title',{'xmlns' => Namespaces::DataForms}).first
+
+            instr = instruction_node.content if instruction_node
+            title = title_node.content if instruction_node
+
             form_type = read_attr(form, 'type')
             field_nodes = form.xpath('xmlns:field',{'xmlns' => Namespaces::DataForms})
             fields = field_nodes.map do |field|
@@ -392,8 +408,12 @@ module EM::Xmpp
 
               Field.new(var,type,label,values,options)
             end
-            Form.new form_type, fields
+            Form.new form_type, fields, title, instr
           end
+        end
+
+        def form
+          x_forms.first
         end
       end
 
@@ -712,6 +732,54 @@ module EM::Xmpp
             field = form.fields.first
             field.values if field
           end
+        end
+      end
+
+      module Bob
+        include Iq
+        Item = Struct.new(:jid, :data, :mime, :max_age) do
+          def sha1
+            Digest::SHA1.hexdigest data
+          end
+          def cid
+            "sha1+#{sha1}@#{jid}"
+          end
+          def b64
+            Base64.strict_encode64 data
+          end
+        end
+
+        def reply(item,*args)
+          ref = "cid:#{item.cid}"
+          params = {}
+          params['max-age'] = item.max_age if item.max_age
+          super(*args) do |xml|
+            xml.data({:xmlns => EM::Xmpp::Namespaces::BoB, :cid => ref, :type => item.mime}.merge(params), item.b64)
+            yield xml if block_given?
+          end
+        end
+
+        def data_node
+          xpath('//xmlns:data',{'xmlns' => Namespaces::BoB}).first
+        end
+        def cid
+          n = data_node
+          read_attr(n, 'cid') if n
+        end
+        def max_age
+          n = data_node
+          read_attr(n, 'max-age'){|x| Integer(x)} if n
+        end
+        def mime_type
+          n = data_node
+          read_attr(n, 'type') if n
+        end
+        def raw_data
+          n = data_node
+          n.content if n
+        end
+        def data
+          Base64.strict_decode raw_data if raw_data
         end
       end
 
@@ -1072,6 +1140,9 @@ module EM::Xmpp
       class Message < Bit
         include Contexts::Message
       end
+      class Attention < Bit
+        include Contexts::Attention
+      end
       class Iq < Bit
         include Contexts::Iq
       end
@@ -1116,6 +1187,9 @@ module EM::Xmpp
       end
       class Streaminitiation < Bit
         include Contexts::Streaminitiation
+      end
+      class Bob < Bit
+        include Contexts::Bob
       end
       class Ibb < Bit
         include Contexts::Ibb

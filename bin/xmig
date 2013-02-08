@@ -27,22 +27,27 @@ module Command extend self
     end
   end
 
-  def print_dataform(ctx)
+  def print_dataform(form)
+    puts "# #{form.title}" if form.title
+    puts "#{form.instructions}" if form.instructions
+    form.fields.each_with_index do |field,fidx|
+      puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
+      letter = 'a'
+      field.options.each do |opt| 
+        puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+        letter = letter.succ
+      end
+      field.values.each do |val| 
+        puts "> #{val}"
+        letter = letter.succ
+      end
+    end
+  end
+
+  def print_context_dataforms(ctx)
     df = ctx.bit!(:dataforms)
     df.x_forms.each do |form|
-      form.fields.each_with_index do |field,fidx|
-        puts "#{fidx}) #{field.label || '_'} (#{field.var}/#{field.type})"
-        letter = 'a'
-        field.options.each do |opt| 
-          puts "#{fidx}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
-          letter = letter.succ
-        end
-        puts "Currently:"
-        field.values.each do |val| 
-          puts "#{val}"
-          letter = letter.succ
-        end
-      end
+      print_dataform form
     end
   end
 
@@ -141,7 +146,7 @@ module Command extend self
         puts "listing options of subscription on: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).subscription_options(subid)
         puts "=== PubSub subscription options form ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
     when 'pubsub-subscription-default-options'
       jid,node = param.split(':',2)
@@ -151,7 +156,7 @@ module Command extend self
         entity = entity.node(node) if node
         ctx = entity.default_subscription_configuration
         puts "=== PubSub default subscription options ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
     when 'pubsub-configure-subscription'
       jid,node,formdata = param.split(':',3)
@@ -229,7 +234,16 @@ module Command extend self
         puts "listing PubSub node configuration options: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).configuration_options
         puts "=== PubSub node configuration options form ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
+      end
+
+    when 'pubsub-configure-node'
+      jid,node = param.split(':',2)
+      lambda do |client|
+        ctx = client.entity(jid).pubsub(node).configuration_options
+        client.default_dataform_conversation(ctx,"=== Configuring PubSub node ===") do |proceed,state|
+          client.entity(jid).pubsub(node).configure(state.answers) if proceed
+        end
       end
 
     when 'pubsub-node-default-options'
@@ -238,10 +252,10 @@ module Command extend self
         puts "listing default PubSub node configuration options: #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).default_configuration
         puts "=== PubSub default node configuration options form ==="
-        Command.print_dataform ctx
+        Command.print_context_dataforms ctx
       end
 
-    when 'pubsub-configure-node'
+    when 'pubsub-send-node-configuration'
       jid,node,formdata = param.split(':',3)
       lambda do |client|
         fields = Command.parse_formdata formdata
@@ -309,6 +323,60 @@ module Command extend self
         puts "speaking to: #{dst}"
         client.entity(dst).say(msg)
       end
+
+    when 'buzzmsg'
+      dst,msg = param.split(':',2)
+      lambda do |client|
+        puts "speaking to: #{dst}"
+        client.entity(dst).say(msg,'chat',lambda{|xml| xml.attention(:xmlns => EM::Xmpp::Namespaces::Attention)})
+      end
+
+    when 'avatar'
+      path = param
+      lambda do |client|
+        mime ||= "image/png" #TODO get mime
+        dat = File.read(path)
+        item = EM::Xmpp::Entity::Avatar::Item.new(nil,dat,16,16,mime)
+        puts "sending avatar"
+        ctx = client.jid.bare.avatar.publish item
+      end
+    when 'delete-avatar'
+      lambda do |client|
+        puts "sending avatar"
+        ctx = client.jid.bare.avatar.remove
+      end
+
+    when 'smiley'
+      dst,path,mime = param.split(':',2)
+      lambda do |client|
+        mime ||= "image/png" #TODO get mime
+        dat = File.read(path)
+        item = EM::Xmpp::Context::Contexts::Bob::Item.new(client.jid,dat,mime,65535)
+
+        puts "sending smiley to: #{dst}"
+        xmlproc = lambda do |xml| 
+          xml.body "smiley"
+          xml.html(:xmlns => EM::Xmpp::Namespaces::XhtmlIM) do |html|
+            html.body(:xmlns => 'http://www.w3.org/1999/xhtml') do |body|
+              body.img('alt' => 'smiley', 'src'=>"cid:#{item.cid}")
+            end
+          end
+        end
+
+        client.entity(dst).say("",'chat', xmlproc)
+        client.on_iq do |ctx|
+          bob = ctx.bit(:bob)
+          if bob and (bob.cid == item.cid)
+            puts "sending bob"
+            iq = bob.reply(item)
+            client.send_stanza iq
+            ctx.delete_xpath_handler!
+            ctx.done!
+          end
+          ctx
+        end
+      end
+
 
     when 'gsay', 'gtell', 'gmsg'
       dst,msg = param.split(':',2)
@@ -647,7 +715,7 @@ module RosterClient
         if event.configuration
           cfg = event.configuration
           puts "new node configuration for #{cfg.node}"
-          Command.print_dataform(ctx)
+          Command.print_context_dataforms(ctx)
         end
 
         ctx.done!
@@ -671,7 +739,14 @@ module RosterClient
         puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
-        Command.print_dataform ctx
+
+        default_dataform_conversation(ctx, "Negotiating stream") do |proceed,state|
+          if proceed
+            si.from.transfer.negotiation_reply(si.id, state.answers)
+          else
+            send_stanza si.reply(:type => 'error')
+          end
+        end
 
         ctx.done!
       end
@@ -836,6 +911,95 @@ module RosterClient
     end
   end
 
+  def default_dataform_conversation(ctx, banner, &action)
+    ctx.env['dataform'] = ctx.bit!(:dataforms).form
+    dataform_conversation(ctx) do |step|
+      step.on(:start) do
+        puts banner
+      end
+
+      step.on(:confirm) do |state|
+        puts "Ready to submit:"
+        Command.print_dataform state.answers
+        puts "Submit? Y/n"
+      end
+
+      step.on(:user_answer) do |state|
+        txt = state.user_input
+        case txt 
+        when ':cancel'
+          :cancel
+        when ':prev',':previous'
+          :previous
+        when ':next',''
+          values = state.current_response_values
+          response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+          state.answers.fields[state.current_idx] = response_field
+          :next
+        when /^:\d+\.(\w+)$/ #answers to a question by response ID
+          option_code = Regexp.last_match[1]
+          field = state.current_field
+          letter = 'a'
+          opt = field.options.find do |o|
+            found   = letter == option_code
+            letter  = letter.succ
+            found
+          end
+
+          if opt
+            values = [opt.value]
+            response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+            state.answers.fields[state.current_idx] = response_field
+            :modified
+          else
+            :repeat
+          end
+        else
+          values = [txt]
+          response_field = EM::Xmpp::Context::Contexts::Dataforms::Field.new(state.current_field.var,nil,nil,values,[])
+          state.answers.fields[state.current_idx] = response_field
+          :modified
+        end
+      end
+
+      step.on(:ask) do |state|
+        fidx  = state.current_idx
+        field = state.current_field
+
+        puts "#{fidx+1}/#{state.form.fields.count}) #{field.label || '_'} (#{field.var}/#{field.type})"
+        letter = 'a'
+        field.options.each do |opt| 
+          puts "#{fidx+1}.#{letter}) #{opt.value} -- #{opt.label || '_'}"
+          letter = letter.succ
+        end
+
+        if state.current_response_values.any?
+          puts "Current response value:"
+          state.current_response_values.each do |val| 
+            puts "#{val}"
+            letter = letter.succ
+          end
+        end
+        puts "Enter your choice:"
+      end
+
+      step.on(:submit) do |state|
+        if state.user_input == 'n'
+          puts "Cancelled"
+          action.call(false, state)
+        else
+          puts "Proceeding"
+          action.call(true, state)
+        end
+      end
+
+      step.on(:cancel) do |state|
+        puts "Cancelled"
+        action.call(false, state)
+      end
+    end
+  end
+
   def stanza_end(stanza)
     puts stanza if @show_xml
     super
@@ -843,7 +1007,11 @@ module RosterClient
 
   def handle_command(str)
     begin
-      Command.for(str).call self
+      if conversation(:dataform)
+        conversation(:dataform).resume str
+      else
+        Command.for(str).call self unless str.empty?
+      end
     rescue CommandParseError
       puts "could not parse #{str}"
     end
@@ -879,7 +1047,7 @@ class Kb < EM::Connection
     @client = client
   end
   def receive_line line
-    Fiber.new { @client.handle_command line unless line.empty?}.resume
+    Fiber.new { @client.handle_command line.chomp}.resume
   end
 end
 
