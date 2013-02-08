@@ -331,6 +331,21 @@ module Command extend self
         client.entity(dst).say(msg,'chat',lambda{|xml| xml.attention(:xmlns => EM::Xmpp::Namespaces::Attention)})
       end
 
+    when 'avatar'
+      path = param
+      lambda do |client|
+        mime ||= "image/png" #TODO get mime
+        dat = File.read(path)
+        item = EM::Xmpp::Entity::Avatar::Item.new(nil,dat,16,16,mime)
+        puts "sending avatar"
+        ctx = client.jid.bare.avatar.publish item
+      end
+    when 'delete-avatar'
+      lambda do |client|
+        puts "sending avatar"
+        ctx = client.jid.bare.avatar.remove
+      end
+
     when 'smiley'
       dst,path,mime = param.split(':',2)
       lambda do |client|

@@ -25,6 +25,9 @@ module EM::Xmpp
     Roster = 'jabber:iq:roster'
     #XMPP commands
     Commands = "http://jabber.org/protocol/commands"
+    #avatar
+    AvatarData     = "urn:xmpp:avatar:data"
+    AvatarMetaData = "urn:xmpp:avatar:metadata"
     #attention
     Attention = "urn:xmpp:attention:0"
     #entity nicknames
