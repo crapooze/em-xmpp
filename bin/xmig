@@ -3,6 +3,7 @@ require 'em-xmpp'
 require 'em-xmpp/helpers'
 require 'em-xmpp/conversation'
 
+
 if ARGV.empty?
   puts "usage: #{__FILE__} <jid> <pass|passfile> <cmd>"
   exit 0 
@@ -657,20 +658,55 @@ module RosterClient
       ctx
     end
 
+
     # Replies to command queries
     on_iq do |ctx|
       query = ctx.bit(:command)
+
       if query
-        #TODO if the sessionid exists continue a pending command
-        #     if the action is 'prev' come back
-        puts "=== Calling command on behalf of #{query.from} ==="
-        p query.node
-        p query.sessionid
-        p query.action
-        reply = query.reply do |iq|
-            #TODO: read parameters,format the result (can be a result, a request for parameters, or a executing stage)
+        if query.sessionid
+          key = "command:#{query.from}:#{query.node}:#{query.sessionid}"
+          conv = conversation(key)
+          conv.resume ctx if conv
+          #else returns an error
+        else
+          puts "=== Calling command on behalf of #{query.from} ==="
+
+          fields = [EM::Xmpp::Context::Contexts::Dataforms::Field.new(
+            'stream-method',
+            'list-single',
+            "Stream Method", #user-friendly label
+            ['foo'],  #current values
+            ['foo','bar','baz'] #available options
+          ),
+          EM::Xmpp::Context::Contexts::Dataforms::Field.new(
+            'tough',
+            'boolean',
+            "True/False", #user-friendly label
+            ['0'],  #current values
+            [],
+          )
+          ]
+          form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('form', fields)
+
+          step1 = CommandStep.new(form)
+          spec  = CommandSpec.new([step1,step1]) #actually pick it from query. node
+
+          start_command_conversation(ctx,spec) do |step|
+            step.on(:start) do |state|
+              state.flash = CommandFlash.new :info, "some info"
+            end
+            step.on(:answer) do |state|
+              action = state.last_answer.ctx.bit(:command).action
+              puts "user answered (#{action})"
+              Command.print_context_dataforms state.last_answer.ctx
+              state.status = :completed
+            end
+            step.on(:cancel) do |state|
+              puts "cancelled"
+            end
+          end
         end
-        send_stanza reply
         ctx.done!
       end
       ctx

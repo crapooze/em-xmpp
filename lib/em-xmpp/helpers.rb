@@ -103,8 +103,94 @@ module EM::Xmpp
       end
     end
 
-    def build_submit_form(xml,form)
-      xml.x(:xmlns => DataForms, :type => 'submit') do |x|
+    CommandFlash = Struct.new(:level, :msg)
+    CommandState = Struct.new(:command, :status, :current_idx, :flash, :last_answer) do
+      def current_step
+        command.steps[current_idx]
+      end
+      def form
+        current_step.form
+      end
+      def can_complete?
+        current_step == command.steps.last
+      end
+      def can_prev?
+        current_idx > 0
+      end
+      def can_next?
+        current_idx + 1 < command.steps.size
+      end
+    end
+    CommandSpec  = Struct.new(:steps)
+    CommandStep  = Struct.new(:form) do
+      def verify
+        true
+      end
+      def execute
+      end
+    end
+
+    def start_command_conversation(ctx,spec,&blk)
+      query   = ctx.bit(:command)
+      sess_id = "cmd:#{ctx.object_id}"
+      key     = "command:#{query.from}:#{query.node}:#{sess_id}"
+
+      state = CommandState.new(spec, :completed, 0, nil, nil)
+
+      start_conversation(ctx,key,state) do |conv|
+        conv.prepare_callbacks(:start, :answer, :cancel, &blk)
+
+        cnt = state.command.steps.count
+        idx = 0
+
+        conv.callback(:start)
+
+        catch :cancel do
+          until (idx + 1) > cnt #XXX we may not want a linear questionning
+            state.status = 'executing'
+            state.current_idx = idx
+
+            reply = query.reply do |iq|
+              iq.command(:xmlns => EM::Xmpp::Namespaces::Commands, :sessionid => sess_id, :node => query.node, :status => state.status) do |cmd|
+                cmd.actions do |n|
+                  n.complete if state.can_complete?
+                  n.prev     if state.can_prev?
+                  n.next     if state.can_next?
+                end
+                build_form(cmd,state.form,'form')
+                cmd.note({:type => state.flash.level}, state.flash.msg) if state.flash
+              end
+            end
+
+            user_answer       = conv.send_stanza reply
+            state.last_answer = user_answer
+            action            = user_answer.ctx.bit(:command).action
+
+            case action
+            when 'cancel'
+              conv.callback(:cancel)
+              state.status = 'cancel'
+              throw :cancel
+            else
+              conv.callback(:answer)
+              idx += 1
+            end
+          end #end of until
+
+          state.status = 'completed'
+        end
+
+        finalizer = state.last_answer.ctx.bit(:command).reply do |iq|
+          iq.command(:xmlns => EM::Xmpp::Namespaces::Commands, :sessionid => sess_id, :node => query.node, :status => state.status) do |cmd|
+            cmd.note({:type => state.flash.level}, state.flash.msg) if state.flash
+          end
+        end
+        send_stanza finalizer
+      end
+    end
+
+    def build_form(xml,form,type='submit')
+      xml.x(:xmlns => DataForms, :type => type) do |x|
         form.fields.each do |field|
           args = {'var' => field.var}
           args = args.merge('type' => field.type) unless field.type.nil? or field.type.empty?
@@ -120,6 +206,10 @@ module EM::Xmpp
           end
         end
       end
+    end
+
+    def build_submit_form(xml,form)
+      build_form(xml,form,'submit')
     end
 
   end
