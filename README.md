@@ -233,10 +233,15 @@ This library provides helpers to add/remove entities from your roster as well
 as helpers to get the roster as a list of contacts.
 
 ### Muc
-Medium support to join/leave/invite/kick/ban/voice/unvoice/chat with people in MUC rooms.
+Good support to join/leave/invite/kick/ban/voice/unvoice/chat with people in MUC rooms.
 
 ### PubSub
-Basic support to subscribe/unsubscribe/publish/receive items.
+Partial support. You can subscribe/unsubscribe/publish/receive items, configure
+subscription or node parameters. The missing part is the on accepting PubSub
+subscriptions.
+
+### File Transfer
+There is enough to support for IBB file transfers.
 
 ## Missing
 
