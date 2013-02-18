@@ -3,6 +3,7 @@ require 'em-xmpp'
 require 'em-xmpp/helpers'
 require 'em-xmpp/conversation'
 
+
 if ARGV.empty?
   puts "usage: #{__FILE__} <jid> <pass|passfile> <cmd>"
   exit 0 
@@ -637,6 +638,86 @@ module RosterClient
       ctx
     end
 
+    # Replies to item queries
+    on_iq do |ctx|
+      query = ctx.bit(:discoitems)
+      if query
+        list = items(query.to,query.node)
+        puts "==== #{query.from} discovers #{list.size} items at node #{query.node} ==="
+        reply = query.reply do |iq|
+          iq.query(:xmlns => EM::Xmpp::Namespaces::DiscoverItems,
+                   :node => EM::Xmpp::Namespaces::Commands) do |q|
+            list.each do |item|
+              q.item('jid' => item.entity, 'node'=> item.node, 'name'=>item.name)
+            end
+          end
+        end
+        send_stanza reply
+        ctx.done!
+      end
+      ctx
+    end
+
+
+    # Replies to command queries
+    on_iq do |ctx|
+      query = ctx.bit(:command)
+
+      if query
+        if query.sessionid
+          key = "command:#{query.from}:#{query.node}:#{query.sessionid}"
+          conv = conversation(key)
+          conv.resume ctx if conv
+          #else returns an error
+        else
+          puts "=== Calling command on behalf of #{query.from} ==="
+          sess_id = "cmd:#{ctx.object_id}"
+          key     = "command:#{query.from}:#{query.node}:#{sess_id}"
+
+          fields = [EM::Xmpp::Context::Contexts::Dataforms::Field.new(
+            'stream-method',
+            'list-single',
+            "Stream Method", #user-friendly label
+            ['foo'],  #current values
+            ['opt1','opt2','opt3'] #available options
+          ),
+          EM::Xmpp::Context::Contexts::Dataforms::Field.new(
+            'bar',
+            'boolean',
+            "True/False", #user-friendly label
+            ['0'],  #current values
+            [],
+          )
+          ]
+          form = EM::Xmpp::Context::Contexts::Dataforms::Form.new('form', fields,"please answer", "just fill-in the values")
+          result = EM::Xmpp::Context::Contexts::Dataforms::Form.new('result', fields)
+
+          step1 = CommandStep.new(form)
+          spec  = LinearCommandsSpec.new([step1]) #actually pick it from query. node
+
+          start_command_conversation(ctx,key,sess_id,spec) do |step|
+            step.on(:start) do |state|
+              state.flash = CommandFlash.new :info, "some info"
+            end
+            step.on(:answer) do |state|
+              action = state.last_answer.ctx.bit(:command).action
+              puts "user answered (#{action})"
+              Command.print_context_dataforms state.last_answer.ctx
+              state.flash = CommandFlash.new :info, "some other info"
+              state.status = :executing
+              state.current_idx += 1
+              state.result = result
+            end
+            step.on(:cancel) do |state|
+              puts "cancelled"
+            end
+          end
+        end
+        ctx.done!
+      end
+      ctx
+    end
+
     # Prints Pubsub event
     on_message do |ctx|
       event = ctx.bit(:pubsubevent)
@@ -742,6 +823,13 @@ module RosterClient
       end
       ctx
     end
+  end
+
+  # list of supported items for the given node
+  def items(jid,node)
+    #TODO: correctly pick items from the jid/node name
+    [EM::Xmpp::Context::Contexts::Discoitems::Item.new(jid.full, 'cmd:1','a first command'),
+    EM::Xmpp::Context::Contexts::Discoitems::Item.new(jid.full, 'cmd:2','anoter command')]
   end
 
   def ibb_conversation_key(ibb)
