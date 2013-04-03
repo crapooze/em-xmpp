@@ -54,7 +54,7 @@ module EM::Xmpp
       connection.send_stanza pres, &blk
     end
 
-    # sends some plain message to the entity (use type = 'chat')
+    # sends some plain message to the entity (use type = 'chat') TODO xml builder
     def say(body, type='chat', xmlproc=nil, &blk)
       msg = connection.message_stanza(:to => jid, :type => type) do |xml|
         xml.body body
@@ -84,14 +84,12 @@ module EM::Xmpp
       item_fields = {:jid => jid.bare}
       item_fields[:name] = display_name if display_name
 
-      query = connection.iq_stanza(:type => 'set') do |iq|
-        iq.query(:xmlns => Roster) do |q|
-          q.item item_fields
-          groups.each do |grp|
-            q.group grp
-          end
-        end
-      end
+      query = connection.iq_stanza({:type => 'set'},
+				x('query',{:xmlns => Roster},
+					[x('item',item_fields)] +
+					groups.map { |grp| x('group',grp) }
+				)
+			)
 
       send_iq_stanza_fibered query
     end
@@ -100,11 +98,11 @@ module EM::Xmpp
     def remove_from_roster
       item_fields = {:jid => jid.bare, :subscription => 'remove'}
 
-      query = connection.iq_stanza(:type => 'set') do |iq|
-        iq.query(:xmlns => Roster) do |q|
-          q.item item_fields
-        end
-      end
+      query = connection.iq_stanza({:type => 'set'},
+				x('query',{:xmlns => Roster},
+					x('item',item_fields)
+				)
+			)
 
       send_iq_stanza_fibered query
     end
@@ -114,18 +112,14 @@ module EM::Xmpp
     def discover_infos(node=nil)
       hash = {'xmlns' => Namespaces::DiscoverInfos}
       hash['node'] = node if node
-      iq = connection.iq_stanza('to'=>jid) do |xml|
-        xml.query(hash)
-      end
+      iq = connection.iq_stanza({'to'=>jid}, x('query', hash))
       send_iq_stanza_fibered iq
     end
 
     # discovers items (disco#items) of an entity
     # can optionally specify a node to discover
     def discover_items(node=nil)
-      iq = connection.iq_stanza('to'=>jid.to_s) do |xml|
-        xml.query('xmlns' => Namespaces::DiscoverItems)
-      end
+      iq = connection.iq_stanza({'to'=>jid.to_s}, x('query', 'xmlns' => Namespaces::DiscoverItems))
       send_iq_stanza_fibered iq
     end
 
@@ -160,7 +154,7 @@ module EM::Xmpp
         ret[:date] = nil #TODO
         ret
       end
-
+			#TODO xml builder
       def negotiation_request(filedesc,sid,form)
         si_args = {'profile'    => EM::Xmpp::Namespaces::FileTransfer,
                    'mime-type'  => filedesc[:mime]
@@ -182,7 +176,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-
+			#TODO xml builder
       def negotiation_reply(reply_id,form)
         iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do |xml|
           xml.si(:xmlns => EM::Xmpp::Namespaces::StreamInitiation) do |si|
@@ -212,7 +206,7 @@ module EM::Xmpp
         publish_data item
         publish_metadata item
       end
-
+			#TODO xml builder
       def publish_data(item)
         iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -225,7 +219,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-
+			#TODO xml builder
       def publish_metadata(item)
         iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -240,7 +234,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-      
+      #TODO xml builder
       def remove
         iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -268,6 +262,7 @@ module EM::Xmpp
 
       # requests the list of subscriptions on this PubSub service
       # returns the iq context for the answer
+			#TODO xml builder
       def service_subscriptions
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -279,6 +274,7 @@ module EM::Xmpp
 
       # requests the list of affiliations for this PubSub service
       # returns the iq context for the answer
+			#TODO xml builder
       def service_affiliations
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -290,6 +286,7 @@ module EM::Xmpp
 
       # list the subscription on that node
       # returns the iq context for the answer
+			#TODO xml builder
       def subscription_options(subscription_id=nil)
         params = {}
         params['subid'] = subscription_id if subscription_id
@@ -307,6 +304,7 @@ module EM::Xmpp
       # sets configuration options on this entity
       # uses a DataForms form
       # returns the iq context for the answer
+			#TODO xml builder
       def configure_subscription(form)
         subscribee = connection.jid.bare
 
@@ -323,6 +321,7 @@ module EM::Xmpp
 
       # retrieve default configuration of this entity
       # returns the iq context for the answer
+			#TODO xml builder
       def default_subscription_configuration
         subscribee = connection.jid.bare
         args = {'node' => node_id} if node_id
@@ -338,6 +337,7 @@ module EM::Xmpp
 
       # subscribe to this entity
       # returns the iq context for the answer
+			#TODO xml builder
       def subscribe
         subscribee = connection.jid.bare
 
@@ -353,6 +353,7 @@ module EM::Xmpp
       # subscribe and configure this entity at the same time
       # see subscribe and configure
       # returns the iq context for the answer
+			#TODO xml builder
       def subscribe_and_configure(form)
         subscribee = connection.jid.bare
 
@@ -372,6 +373,7 @@ module EM::Xmpp
       # One must provide a subscription-id if there
       # are multiple subscriptions to this node.
       # returns the iq context for the answer
+			#TODO xml builder
       def unsubscribe(subscription_id=nil)
         params = {}
         params['subid'] = subscription_id if subscription_id
@@ -391,6 +393,7 @@ module EM::Xmpp
       # item_ids is the list of IDs to select from the pubsub node
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def items(max_items=nil,item_ids=nil)
         params = {}
         params['max_items'] = max_items if max_items
@@ -420,6 +423,7 @@ module EM::Xmpp
       # pubsub service will attribute an ID
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def publish(item_payload,item_id=nil)
         params = {}
         params['id'] = item_id if item_id
@@ -444,6 +448,7 @@ module EM::Xmpp
       # Retracts an item on a PubSub node given it's item_id.
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def retract(item_id=nil)
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -459,6 +464,7 @@ module EM::Xmpp
       # Creates the PubSub node.
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def create
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -473,6 +479,7 @@ module EM::Xmpp
       # Purges the PubSub node.
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def purge
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
@@ -485,6 +492,7 @@ module EM::Xmpp
 
       # requests the list of subscriptions on this pubsub node (for the owner)
       # returns the iq context for the answer
+			#TODO xml builder
       def subscriptions
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
@@ -496,6 +504,7 @@ module EM::Xmpp
 
       # requests the list of affiliations on this pubsub node (for the owner)
       # returns the iq context for the answer
+			#TODO xml builder
       def affiliations
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
@@ -507,6 +516,7 @@ module EM::Xmpp
 
       # changes the subscription status of a pubsub node (for the owner)
       # returns the iq context for the answer
+			#TODO xml builder
       def modify_subscriptions(subs)
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
@@ -522,6 +532,7 @@ module EM::Xmpp
 
       # changes the affiliation status of a pubsub node (for the owner)
       # returns the iq context for the answer
+			#TODO xml builder
       def modify_affiliations(affs)
         affs = [affs].flatten
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
@@ -557,6 +568,7 @@ module EM::Xmpp
       # Optionnaly redirects the node.
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def delete(redirect_uri=nil)
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
@@ -572,6 +584,7 @@ module EM::Xmpp
       # Creates the PubSub node with a non-default configuration.
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def create_and_configure(form)
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |node|
@@ -589,6 +602,7 @@ module EM::Xmpp
       # requests the node configuration (for owners)
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def configuration_options
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
@@ -602,6 +616,7 @@ module EM::Xmpp
       # configures the node (for owners)
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def configure(form)
         iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
@@ -617,6 +632,7 @@ module EM::Xmpp
       # retrieve default configuration of this pubsub service
       #
       # returns the iq context for the answer
+			#TODO xml builder
       def default_configuration
         iq = connection.iq_stanza('to'=>jid.bare) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |sub|
@@ -645,7 +661,7 @@ module EM::Xmpp
         muc(nil)
       end
 
-      # Join a MUC.
+      # Join a MUC. TODO xml builder
       def join(nick,pass=nil,historysize=0,&blk)
         pres = connection.presence_stanza('to'=> muc(nick).to_s) do |xml|
           xml.password pass if pass
@@ -656,7 +672,7 @@ module EM::Xmpp
         connection.send_stanza pres, &blk
       end
 
-      # Leave a MUC.
+      # Leave a MUC. TODO xml builder
       def part(nick,msg=nil)
         pres = connection.presence_stanza('to'=> muc(nick).to_s,'type'=>'unavailable') do |xml|
           xml.status msg if msg
@@ -669,7 +685,7 @@ module EM::Xmpp
         join(nick)
       end
 
-      # Say some message in the muc.
+      # Say some message in the muc. TODO xml builder
       def say(body, xmlproc=nil, &blk)
         msg = connection.message_stanza(:to => jid, :type => 'groupchat') do |xml|
           xml.body body
@@ -679,7 +695,7 @@ module EM::Xmpp
       end
 
       private
-
+			#TODO xml builder
       def set_role(role,nick,reason=nil,&blk)
         iq = connection.iq_stanza(:to => jid,:type => 'set') do |xml|
           xml.query('xmlns' => Namespaces::MucAdmin) do |q|
@@ -690,7 +706,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-
+			#TODO xml builder
       def set_affiliation(affiliation,affiliated_jid,reason=nil,&blk)
         iq = connection.iq_stanza(:to => jid,:type => 'set') do |xml|
           xml.query('xmlns' => Namespaces::MucAdmin) do |q|
@@ -813,7 +829,7 @@ module EM::Xmpp
         raise NotImplementedError
       end
 
-      # sets the room subject (Message Of The Day)
+      # sets the room subject (Message Of The Day) TODO xml builder
       def motd(subject,&blk)
         msg = connection.message_stanza(:to => jid) do |xml|
           xml.subject subject
@@ -821,7 +837,7 @@ module EM::Xmpp
         connection.send_stanza msg, &blk
       end
 
-      # invites someone (based on his jid) to the MUC
+      # invites someone (based on his jid) to the MUC TODO xml builder
       def invite(invited_jid,reason="no reason",&blk)
         msg = connection.message_stanza(:to => jid) do |xml|
           xml.x('xmlns' => Namespaces::MucUser) do |x|

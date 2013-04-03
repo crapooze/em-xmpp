@@ -4,10 +4,12 @@ require 'eventmachine'
 require 'em-xmpp/context'
 require 'em-xmpp/namespaces'
 require 'em-xmpp/resolver'
+require 'em-xmpp/xml_builder'
 
 module EM::Xmpp
   module Connector
     include Namespaces
+    include XmlBuilder
 
     #XML SAX document which delegates its method to a recipient object
     class ForwardingDocument < Nokogiri::XML::SAX::Document
@@ -49,9 +51,8 @@ module EM::Xmpp
       send_data data
     end
 
-    def send_xml(&blk)
-      data = build_xml(&blk)
-      send_raw data
+    def send_xml(*args)
+      send_raw build_xml(*args)
     end
 
     def restart_xml_stream
@@ -77,11 +78,6 @@ module EM::Xmpp
 
     def unbind
       puts "**** unbound ****" if $DEBUG
-    end
-
-    def build_xml(&blk)
-      n = Nokogiri::XML::Builder.new(&blk)
-      n.doc.root.to_xml 
     end
 
     private
@@ -227,9 +223,7 @@ module EM::Xmpp
     ### TLS World
 
     def ask_for_tls
-      send_xml do |x|
-        x.starttls(:xmlns => TLS)
-      end
+     send_xml('starttls', :xmlns => TLS)
     end
 
     def start_using_tls_and_reset_stream

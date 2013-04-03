@@ -177,9 +177,9 @@ module EM::Xmpp
           jid = connection.jid.full
           {'from' => jid, 'to' => from, 'id' => id}
         end
-        def reply(args={},&blk)
+        def reply(args={}, children=nil)
           args = reply_default_params.merge args
-          connection.presence_stanza(args,&blk)
+          connection.presence_stanza(args,children)
         end
         def priority_node
           xpath('//xmlns:priority',{'xmlns' => Client}).first
@@ -236,9 +236,9 @@ module EM::Xmpp
           h
         end
 
-        def reply(args={},&blk)
+        def reply(args={}, children=nil)
           args = reply_default_params.merge args
-          connection.message_stanza(args,&blk)
+          connection.message_stanza(args,children)
         end
 
         def groupchat?
@@ -261,9 +261,9 @@ module EM::Xmpp
           {'from' => jid, 'to' => from, 'type' => 'result', 'id' => id}
         end
 
-        def reply(args={},&blk)
+        def reply(args={}, children=nil)
           args = reply_default_params.merge args
-          connection.iq_stanza(args,&blk)
+          connection.iq_stanza(args,children)
         end
       end
 
@@ -748,7 +748,7 @@ module EM::Xmpp
             Base64.strict_encode64 data
           end
         end
-
+				#TODO xml builder
         def reply(item,*args)
           ref = "cid:#{item.cid}"
           params = {}

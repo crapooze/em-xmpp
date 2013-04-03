@@ -3,6 +3,7 @@ require 'em-xmpp/namespaces'
 require 'em-xmpp/context'
 require 'em-xmpp/stanza_matcher'
 require 'em-xmpp/stanza_handler'
+require 'em-xmpp/xml_builder'
 require 'base64'
 require 'sasl/base'
 require 'sasl'
@@ -10,6 +11,7 @@ require 'sasl'
 module EM::Xmpp
   class Handler
     include Namespaces
+		include XmlBuilder
 
     def initialize(conn)
       @connection         = conn
@@ -345,17 +347,16 @@ module EM::Xmpp
     end
 
     def bind_to_resource(wanted_res=nil)
-      c.send_stanza(c.iq_stanza('type' => 'set') do |x|
-        x.bind('xmlns' => Bind) do |y|
-          y.resource(wanted_res) if wanted_res
-        end
-      end)
+      c.send_stanza(c.iq_stanza({'type' => 'set'},
+					x('bind',{'xmlns' => Bind},
+						 wanted_res ? x('resource',wanted_res) : nil
+					)
+				)
+			)
     end
 
     def start_session
-      session_request = c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
-        x.session('xmlns' => Session) 
-      end
+      session_request = c.iq_stanza({'type' => 'set', 'to' => jid.domain}, x('session','xmlns' => Session))
 
       c.send_stanza(session_request) do |ctx|
         if ctx.bit!(:stanza).type == 'result'
@@ -385,13 +386,7 @@ module EM::Xmpp
     end
 
     def reply_sasl(msg, val=nil, mech=nil)
-      c.send_xml do |x|
-        if val
-          x.send(msg, val, {'xmlns' => SASL, 'mechanism' => mech})
-        else
-          x.send(msg,  {'xmlns' => SASL, 'mechanism' => mech})
-        end
-      end
+      c.send_xml(msg,  {'xmlns' => SASL, 'mechanism' => mech}, val)
     end
 
   end

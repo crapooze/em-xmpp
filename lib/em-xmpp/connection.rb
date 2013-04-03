@@ -78,28 +78,19 @@ module EM::Xmpp
       {'type' => 'get', 'id' => "em-xmpp.#{rand(65535)}"}
     end
 
-    def presence_stanza(params={}, &blk)
+    def presence_stanza(params={}, children=nil)
       params = default_presence_params.merge(params)
-      xml = build_xml do |x|
-        x.presence(params, &blk)
-      end
-      OutgoingStanza.new xml, params
+      OutgoingStanza.new build_xml('presence', params, children), params
     end
 
-    def message_stanza(params={}, &blk)
+    def message_stanza(params={}, children=nil)
       params = default_message_params.merge(params)
-      xml = build_xml do |x|
-        x.message(params, &blk)
-      end
-      OutgoingStanza.new xml, params
+      OutgoingStanza.new build_xml('message', params, children), params
     end
 
-    def iq_stanza(params={}, &blk)
+    def iq_stanza(params={}, children=nil)
       params = default_iq_params.merge(params)
-      xml = build_xml do |x|
-        x.iq(params, &blk)
-      end
-      OutgoingStanza.new xml, params
+      OutgoingStanza.new build_xml('iq', params, children), params
     end
 
     def send_stanza(stanza)
