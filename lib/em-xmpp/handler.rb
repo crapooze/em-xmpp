@@ -386,7 +386,7 @@ module EM::Xmpp
     end
 
     def reply_sasl(msg, val=nil, mech=nil)
-      c.send_xml(msg,  {'xmlns' => SASL, 'mechanism' => mech}, val)
+      c.send_xml(msg,  val, 'xmlns' => SASL, 'mechanism' => mech)
     end
 
   end

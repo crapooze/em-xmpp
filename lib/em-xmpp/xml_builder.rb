@@ -5,14 +5,18 @@ module EM::Xmpp
 		def x(name, *args)
 			n = Ox::Element.new(name)
 
-			unless args.empty?
-				params, children = args.first, args.last
-
-				params.each { |k,v| n[k] = v } if params.instance_of?(Hash)
-				children.each { |c| n << c } if children.instance_of?(Array)
-				n << children if children.instance_of?(n.class) or children.instance_of?(String)
+			for arg in args
+				case arg
+					when Hash
+						arg.each { |k,v| n[k] = v }
+					when Array
+						arg.each { |c| n << c }
+					when NilClass
+					else
+						n << arg
+				end
 			end
-
+			
 			n
 		end
 

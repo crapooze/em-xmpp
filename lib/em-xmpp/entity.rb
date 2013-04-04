@@ -86,7 +86,7 @@ module EM::Xmpp
 
       query = connection.iq_stanza({:type => 'set'},
 				x('query',{:xmlns => Roster},
-					[x('item',item_fields)] +
+					x('item',item_fields),
 					groups.map { |grp| x('group',grp) }
 				)
 			)
