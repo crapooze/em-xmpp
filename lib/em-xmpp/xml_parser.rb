@@ -4,19 +4,17 @@ require 'ox'
 #workarounds
 module Ox
 	class Element
-		def xpath(*args)
+		def xpath(path,ns)
 			pat = /\/\/.+:/
-			l1=args.first.sub(pat,'')
+			l1=path.sub(pat,'')
 
-			if l1 == value
-				r = [self]
-			else
-				r = locate(l1)
-				if r.empty?
-					l2="*/#{l1}"
-					r = locate(l2)
-				end
-			end
+      queue=[self]
+      r=[]
+      until queue.empty?
+        p = queue.shift
+        r << p if p.value == l1
+        queue.concat(p.nodes) unless p.children.empty? or !r.empty?
+      end
 
 			if r.size == 1 and l1 == 'jid'
 				r=r.first
@@ -26,7 +24,7 @@ module Ox
 		end
 
 		def children
-			nodes
+			text ? [] : nodes
 		end
 
 		def content
