@@ -745,15 +745,15 @@ module EM::Xmpp
             Base64.strict_encode64 data
           end
         end
-				#TODO xml builder
+        
         def reply(item,*args)
           ref = "cid:#{item.cid}"
           params = {}
           params['max-age'] = item.max_age if item.max_age
-          super(*args) do |xml|
-            xml.data({:xmlns => EM::Xmpp::Namespaces::BoB, :cid => ref, :type => item.mime}.merge(params), item.b64)
-            yield xml if block_given?
-          end
+          super(
+            x('data',{:xmlns => EM::Xmpp::Namespaces::BoB, :cid => ref, :type => item.mime}.merge(params), item.b64),
+            *args
+          )
         end
 
         def data_node

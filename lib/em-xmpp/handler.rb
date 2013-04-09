@@ -349,7 +349,7 @@ module EM::Xmpp
     def bind_to_resource(wanted_res=nil)
       c.send_stanza(c.iq_stanza({'type' => 'set'},
 					x('bind',{'xmlns' => Bind},
-						 wanted_res ? x('resource',wanted_res) : nil
+            x_if(wanted_res,'resource',wanted_res)
 					)
 				)
 			)

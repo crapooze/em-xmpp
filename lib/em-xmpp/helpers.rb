@@ -7,7 +7,7 @@ module EM::Xmpp
     def get_roster
       f = Fiber.current
 
-      roster = iq_stanza({},x('query',:xmlns => Roster))
+      roster = iq_stanza(x('query',:xmlns => Roster))
 
       send_stanza(roster) do |response|
         f.resume response.bit!(:roster).items
@@ -156,17 +156,17 @@ module EM::Xmpp
           until state.finished?
             state.status = 'executing'
 
-            reply = query.reply do |iq|
-              iq.command(:xmlns => EM::Xmpp::Namespaces::Commands, :sessionid => sess_id, :node => query.node, :status => state.status) do |cmd|
-                cmd.actions do |n|
-                  n.prev     if state.can_prev?
-                  n.complete if state.can_complete?
-                  n.next     if state.can_next?
-                end
-                build_form(cmd, state.form,'form')
-                cmd.note({:type => state.flash.level}, state.flash.msg) if state.flash
-              end
-            end
+            reply = query.reply(
+              x('command',{:xmlns => EM::Xmpp::Namespaces::Commands, :sessionid => sess_id, :node => query.node, :status => state.status},
+                x('actions',
+                  x_if(state.can_prev?,'prev'),
+                  x_if(state.can_complete?,'complete'),
+                  x_if(state.can_next?,'next')
+                ),
+                build_form(state.form,'form'),
+                x_if(state.flash,'note',{:type => state.flash.level}, state.flash.msg)
+              )
+            )
 
             user_answer       = conv.send_stanza reply
             state.last_answer = user_answer
@@ -185,40 +185,40 @@ module EM::Xmpp
           state.status = 'completed'
         end
 
-        finalizer = state.last_answer.ctx.bit(:command).reply do |iq|
-          iq.command(:xmlns => EM::Xmpp::Namespaces::Commands, :sessionid => sess_id, :node => query.node, :status => state.status) do |cmd|
-            cmd.note({:type => state.flash.level}, state.flash.msg) if state.flash
-            build_form(cmd, state.result,'result') if state.result
-          end
-        end
+        finalizer = state.last_answer.ctx.bit(:command).reply(
+          x('command',{:xmlns => EM::Xmpp::Namespaces::Commands, :sessionid => sess_id, :node => query.node, :status => state.status},
+            x_if(state.flash,'note',{:type => state.flash.level}, state.flash.msg),
+            state.result ? build_form(state.result,'result') : nil
+          )
+        )
         send_stanza finalizer
       end
     end
 
-    def build_form(xml,form,type='submit')
-      xml.x(:xmlns => DataForms, :type => type) do |x|
-        x.title form.title if form.title
-        x.instructions form.instructions if form.instructions
-        form.fields.each do |field|
+    def build_form(form,type='submit')
+      x('x',{:xmlns => DataForms, :type => type},
+        x_if(form.title,'title',form.title),
+        x_if(form.instructions,'instructions',form.instructions),
+        form.fields.map do |field|
           args = {'var' => field.var}
           args = args.merge('type' => field.type) unless field.type.nil? or field.type.empty?
           args = args.merge('label' => field.label) unless field.label.nil? or field.label.empty?
-          x.field(args) do |f|
-            (field.options||[]).each do |opt_value|
-              f.option do |o|
-                o.value opt_value
-              end
+          x('field',args,
+            (field.options||[]).map do |opt_value|
+              x('option',
+                x('value',opt_value)
+              )
+            end,
+            (field.values||[]).map do |value|
+              x('value',value)
             end
-            (field.values||[]).each do |value|
-              f.value value
-            end
-          end
+          )
         end
-      end
+      )
     end
 
-    def build_submit_form(xml,form)
-      build_form(xml,form,'submit')
+    def build_submit_form(form)
+      build_form(form,'submit')
     end
 
   end

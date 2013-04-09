@@ -12,7 +12,7 @@ module Ox
 			for arg in args
 				case arg
 				when Hash
-					arg.each { |k,v| n[k] = v }
+					arg.each { |k,v| n[k.to_s] = v }
 				when Array
 					arg.each { |c| n << c }
 				when NilClass
@@ -41,6 +41,10 @@ module EM::Xmpp
 		def x(*args)
 			Ox::Element.build(*args)
 		end
+
+    def x_if(condition, *args)
+      Ox::Element.build(*args) if condition
+    end
 
     def build_xml(*args)
 			Ox.dump(Ox::Element.build(*args))
