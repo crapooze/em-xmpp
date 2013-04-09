@@ -64,8 +64,6 @@ module EM::Xmpp
       raise RuntimeError, "could not negotiate a stream:\n#{node}"
     end
 
-    OutgoingStanza = Struct.new(:xml, :params)
-
     def default_presence_params
       {}
     end
@@ -78,19 +76,16 @@ module EM::Xmpp
       {'type' => 'get', 'id' => "em-xmpp.#{rand(65535)}"}
     end
 
-    def presence_stanza(params={}, children=nil)
-      params = default_presence_params.merge(params)
-      OutgoingStanza.new build_xml('presence', params, children), params
+    def presence_stanza(*args)
+      OutgoingStanza.new('presence', default_presence_params, *args)
     end
 
-    def message_stanza(params={}, children=nil)
-      params = default_message_params.merge(params)
-      OutgoingStanza.new build_xml('message', params, children), params
+    def message_stanza(*args)
+      OutgoingStanza.new('message',default_message_params,*args)
     end
 
-    def iq_stanza(params={}, children=nil)
-      params = default_iq_params.merge(params)
-      OutgoingStanza.new build_xml('iq', params, children), params
+    def iq_stanza(*args)
+      OutgoingStanza.new('iq', default_iq_params, *args)
     end
 
     def send_stanza(stanza)

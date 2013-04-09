@@ -177,9 +177,8 @@ module EM::Xmpp
           jid = connection.jid.full
           {'from' => jid, 'to' => from, 'id' => id}
         end
-        def reply(args={}, children=nil)
-          args = reply_default_params.merge args
-          connection.presence_stanza(args,children)
+        def reply(*args)
+          connection.presence_stanza(reply_default_params,*args)
         end
         def priority_node
           xpath('//xmlns:priority',{'xmlns' => Client}).first
@@ -236,9 +235,8 @@ module EM::Xmpp
           h
         end
 
-        def reply(args={}, children=nil)
-          args = reply_default_params.merge args
-          connection.message_stanza(args,children)
+        def reply(*args)
+          connection.message_stanza(reply_default_params,*args)
         end
 
         def groupchat?
@@ -261,9 +259,8 @@ module EM::Xmpp
           {'from' => jid, 'to' => from, 'type' => 'result', 'id' => id}
         end
 
-        def reply(args={}, children=nil)
-          args = reply_default_params.merge args
-          connection.iq_stanza(args,children)
+        def reply(*args)
+          connection.iq_stanza(reply_default_params,*args)
         end
       end
 

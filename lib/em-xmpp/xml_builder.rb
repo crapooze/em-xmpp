@@ -28,12 +28,22 @@ end
 
 module EM::Xmpp
 	module XmlBuilder
-		def x(name, *args)
-			Ox::Element.build(name, *args)
+    class OutgoingStanza
+      attr_accessor :xml,:params
+
+      def initialize(*args)
+        node = Ox::Element.build(*args)
+        @xml = Ox.dump(node)
+        @params = node.attributes
+      end
+    end
+
+		def x(*args)
+			Ox::Element.build(*args)
 		end
 
     def build_xml(*args)
-			Ox.dump(x(*args))
+			Ox.dump(Ox::Element.build(*args))
     end
 	end
 end
