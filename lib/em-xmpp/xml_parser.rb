@@ -108,10 +108,15 @@ module EM::Xmpp
       end
 
       @stack << node
+      @text = nil
     end
 
     def xml_end_element(name)
       node = @stack.pop
+      if @text
+        node << @text
+        @text = nil
+      end
       #puts "ending: #{name}, stack:#{@stack.size}" if $DEBUG
 
       case @stack.size
@@ -126,7 +131,11 @@ module EM::Xmpp
     end
 
     def xml_characters(txt)
-      @stack.last << txt
+      if @text
+        @text<<txt
+      else
+        @text=txt
+      end
     end
 
     def xml_error(err)
