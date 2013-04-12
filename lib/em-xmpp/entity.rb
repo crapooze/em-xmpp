@@ -437,15 +437,14 @@ module EM::Xmpp
       # Retracts an item on a PubSub node given it's item_id.
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def retract(item_id=nil)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.retract(:node => node_id) do |retract|
-              retract.item(:id => item_id) 
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('retract',{:node => node_id},
+              x('item',:id => item_id)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -453,13 +452,12 @@ module EM::Xmpp
       # Creates the PubSub node.
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def create
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.create(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('create',:node => node_id)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -468,71 +466,66 @@ module EM::Xmpp
       # Purges the PubSub node.
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def purge
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.purge(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('purge',:node => node_id)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
 
       # requests the list of subscriptions on this pubsub node (for the owner)
       # returns the iq context for the answer
-			#TODO xml builder
       def subscriptions
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.subscriptions(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('subscriptions',:node => node_id)
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
       # requests the list of affiliations on this pubsub node (for the owner)
       # returns the iq context for the answer
-			#TODO xml builder
       def affiliations
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.affiliations(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('affiliations',:node => node_id)
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
       # changes the subscription status of a pubsub node (for the owner)
       # returns the iq context for the answer
-			#TODO xml builder
       def modify_subscriptions(subs)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.subscriptions(:node => node_id) do |node|
-              subs.each do  |s|
-                node.subscription(:jid => s.jid, :subscription => s.subscription, :subid => s.sub_id)
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('subscriptions',{:node => node_id},
+              subs.map do |s|
+                x('subscription',:jid => s.jid, :subscription => s.subscription, :subid => s.sub_id)
               end
-            end
-          end
-        end
+            )
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
       # changes the affiliation status of a pubsub node (for the owner)
       # returns the iq context for the answer
-			#TODO xml builder
       def modify_affiliations(affs)
         affs = [affs].flatten
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.affiliations(:node => node_id) do |node|
-              affs.each do  |s|
-                node.affiliation(:jid => s.jid, :affiliation => s.affiliation)
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('affiliations',{:node => node_id},
+              affs.map do  |s|
+                x('affiliation',:jid => s.jid, :affiliation => s.affiliation)
               end
-            end
-          end
-        end
+            )
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
@@ -557,15 +550,14 @@ module EM::Xmpp
       # Optionnaly redirects the node.
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def delete(redirect_uri=nil)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.delete(:node => node_id) do |del|
-              del.redirect(:uri => redirect_uri) if redirect_uri
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('delete',{:node => node_id},
+              x_if(redirect_uri,'redirect',:uri => redirect_uri)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -573,16 +565,15 @@ module EM::Xmpp
       # Creates the PubSub node with a non-default configuration.
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def create_and_configure(form)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |node|
-            node.create('node' => node_id)
-            node.configure do |options|
-              connection.build_submit_form(options,form)
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('create','node' => node_id),
+            x('configure',
+              connection.build_submit_form(form)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -591,13 +582,12 @@ module EM::Xmpp
       # requests the node configuration (for owners)
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def configuration_options
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
-            node.configure('node' => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('configure','node' => node_id)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -605,15 +595,14 @@ module EM::Xmpp
       # configures the node (for owners)
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def configure(form)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
-            node.configure('node' => node_id) do |config|
-              connection.build_submit_form(config,form)
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('configure',{'node' => node_id},
+              connection.build_submit_form(form)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -621,13 +610,12 @@ module EM::Xmpp
       # retrieve default configuration of this pubsub service
       #
       # returns the iq context for the answer
-			#TODO xml builder
       def default_configuration
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |sub|
-            sub.default
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('default')
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
