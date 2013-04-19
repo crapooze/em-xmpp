@@ -1093,6 +1093,18 @@ module EM::Xmpp
           read_attr(n, 'role') if n
         end
       end
+
+      module Ping
+        include Iq
+
+        def ping?
+          stanza.child && stanza.child.name == 'ping'
+        end
+
+        def pong
+          reply
+        end
+      end
     end
 
     class Bit
@@ -1202,6 +1214,9 @@ module EM::Xmpp
       end
       class Mucuser < Bit
         include Contexts::Mucuser
+      end
+      class Ping < Bit
+        include Contexts::Ping
       end
     end
 
