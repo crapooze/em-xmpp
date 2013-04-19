@@ -34,6 +34,10 @@ module Ox
 		def any?
 			text
 		end
+
+    def child
+      nodes.first
+    end
 	end
 end
 
