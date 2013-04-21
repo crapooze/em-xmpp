@@ -5,6 +5,7 @@ require 'em-xmpp/handler'
 require 'em-xmpp/jid'
 require 'em-xmpp/entity'
 require 'em-xmpp/cert_store'
+require 'em-xmpp/component'
 require 'eventmachine'
 require 'fiber'
 
@@ -17,6 +18,8 @@ module EM::Xmpp
 
     def initialize(jid, pass, mod=nil, cfg={})
       @jid        = jid
+      @component  = jid.node.nil?
+      self.extend Component if component?
       @pass       = pass.dup.freeze
       self.extend mod if mod
       certdir     = cfg[:certificates]
@@ -26,6 +29,10 @@ module EM::Xmpp
                     else
                       nil
                     end
+    end
+
+    def component?
+      @component
     end
 
     def post_init
@@ -55,7 +62,7 @@ module EM::Xmpp
     def negotiation_finished
       @pass    = nil
       @handler = Routine.new self
-      send_stanza presence_stanza()
+      send_stanza presence_stanza() unless component?
       framework_ready if respond_to? :framework_ready
       ready
     end

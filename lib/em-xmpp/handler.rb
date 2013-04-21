@@ -275,63 +275,73 @@ module EM::Xmpp
       on_exception(:anything) do |ctx|
         raise ctx['error']
       end
-      on('//xmlns:starttls', {'xmlns' => TLS}) do |ctx|
-        @connection.ask_for_tls 
-        ctx.delete_xpath_handler!.done!
-      end
 
-      on('//xmlns:proceed', {'xmlns' => TLS }) do |ctx|
-        @connection.start_using_tls_and_reset_stream
-        ctx.delete_xpath_handler!.done!
-      end
-
-      on('//xmlns:mechanisms', {'xmlns' => SASL}) do |ctx|
-        search = ctx.xpath('//xmlns:mechanisms', {'xmlns' => SASL})
-        if search.first
-          mechanisms = search.first.children.map(&:content)
-          start_sasl mechanisms
+      if @connection.component?
+        on('//xmlns:handshake', {}) do |ctx|
+          @connection.negotiation_finished
           ctx.delete_xpath_handler!.done!
-        else
-          raise RuntimeError, "how come there is no mechanism node?"
-        end
-      end
-
-      on('//xmlns:challenge', {'xmlns' => SASL}) do |ctx|
-        sasl_step ctx.stanza
-        ctx.done!
-      end
-
-      on('//xmlns:success', {'xmlns' => SASL}) do |ctx|
-        @connection.restart_xml_stream
-        ctx.delete_xpath_handler!.done!
-      end
-
-      on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
-        bind_to_resource  
-        ctx.delete_xpath_handler!.done!
-      end
-
-      on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
-        jid  = extract_jid ctx.stanza
-
-        if jid
-          @connection.jid_received jid 
-          start_session
-        else
-          raise RuntimeError, "no jid despite binding"
         end
 
-        ctx.delete_xpath_handler!.done!
-      end
+      else
+        on('//xmlns:starttls', {'xmlns' => TLS}) do |ctx|
+          @connection.ask_for_tls
+          ctx.delete_xpath_handler!.done!
+        end
 
-      on('//xmlns:session', {'xmlns' => Session}) do |ctx|
-        @connection.negotiation_finished
-        ctx.delete_xpath_handler!.done!
-      end
+        on('//xmlns:proceed', {'xmlns' => TLS }) do |ctx|
+          @connection.start_using_tls_and_reset_stream
+          ctx.delete_xpath_handler!.done!
+        end
 
-      on('//xmlns:failure', {'xmlns' => SASL}) do |ctx|
-        @connection.negotiation_failed(ctx.stanza)
-        ctx.done!
+        on('//xmlns:mechanisms', {'xmlns' => SASL}) do |ctx|
+          search = ctx.xpath('//xmlns:mechanisms', {'xmlns' => SASL})
+          if search.first
+            mechanisms = search.first.children.map(&:content)
+            start_sasl mechanisms
+            ctx.delete_xpath_handler!.done!
+          else
+            raise RuntimeError, "how come there is no mechanism node?"
+          end
+        end
+
+        on('//xmlns:challenge', {'xmlns' => SASL}) do |ctx|
+          sasl_step ctx.stanza
+          ctx.done!
+        end
+
+        on('//xmlns:success', {'xmlns' => SASL}) do |ctx|
+          @connection.restart_xml_stream
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
+          bind_to_resource
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
+          jid  = extract_jid ctx.stanza
+
+          if jid
+            @connection.jid_received jid
+            start_session
+          else
+            raise RuntimeError, "no jid despite binding"
+          end
+
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:session', {'xmlns' => Session}) do |ctx|
+          @connection.negotiation_finished
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:failure', {'xmlns' => SASL}) do |ctx|
+          @connection.negotiation_failed(ctx.stanza)
+          ctx.done!
+        end
+
       end
 
       on(:anything) do |ctx|

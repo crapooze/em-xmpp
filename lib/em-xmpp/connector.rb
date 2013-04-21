@@ -79,6 +79,9 @@ module EM::Xmpp
 
     ### XMPP World
 
+    def stream_start(node)
+    end
+
     def stanza_start(node)
       raise NotImplementedError
     end

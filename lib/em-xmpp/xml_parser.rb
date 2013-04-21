@@ -104,6 +104,7 @@ module EM::Xmpp
       case @stack.size
       when 0 #the streaming tag starts
         stream_support(node)
+        stream_start node
       when 1 #a stanza starts
         set_current_stanza!(node)
         stanza_start node
