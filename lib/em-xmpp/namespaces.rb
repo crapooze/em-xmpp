@@ -3,6 +3,7 @@ module EM::Xmpp
   # A handy module with the XMPP namespaces name.
   module Namespaces
     Client = 'jabber:client'
+    Component = 'jabber:component'
     #In-band registration
     Registration = 'http://jabber.org/features/iq-register'
     #XMPP stream-level stanza

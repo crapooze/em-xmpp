@@ -177,9 +177,8 @@ module EM::Xmpp
           jid = connection.jid.full
           {'from' => jid, 'to' => from, 'id' => id}
         end
-        def reply(args={},&blk)
-          args = reply_default_params.merge args
-          connection.presence_stanza(args,&blk)
+        def reply(*args)
+          connection.presence_stanza(reply_default_params,*args)
         end
         def priority_node
           xpath('//xmlns:priority',{'xmlns' => Client}).first
@@ -236,9 +235,8 @@ module EM::Xmpp
           h
         end
 
-        def reply(args={},&blk)
-          args = reply_default_params.merge args
-          connection.message_stanza(args,&blk)
+        def reply(*args)
+          connection.message_stanza(reply_default_params,*args)
         end
 
         def groupchat?
@@ -261,9 +259,8 @@ module EM::Xmpp
           {'from' => jid, 'to' => from, 'type' => 'result', 'id' => id}
         end
 
-        def reply(args={},&blk)
-          args = reply_default_params.merge args
-          connection.iq_stanza(args,&blk)
+        def reply(*args)
+          connection.iq_stanza(reply_default_params,*args)
         end
       end
 
@@ -748,15 +745,15 @@ module EM::Xmpp
             Base64.strict_encode64 data
           end
         end
-
+        
         def reply(item,*args)
           ref = "cid:#{item.cid}"
           params = {}
           params['max-age'] = item.max_age if item.max_age
-          super(*args) do |xml|
-            xml.data({:xmlns => EM::Xmpp::Namespaces::BoB, :cid => ref, :type => item.mime}.merge(params), item.b64)
-            yield xml if block_given?
-          end
+          super(
+            x('data',{:xmlns => EM::Xmpp::Namespaces::BoB, :cid => ref, :type => item.mime}.merge(params), item.b64),
+            *args
+          )
         end
 
         def data_node
@@ -1096,6 +1093,18 @@ module EM::Xmpp
           read_attr(n, 'role') if n
         end
       end
+
+      module Ping
+        include Iq
+
+        def ping?
+          stanza.child && stanza.child.name == 'ping'
+        end
+
+        def pong
+          reply
+        end
+      end
     end
 
     class Bit
@@ -1205,6 +1214,9 @@ module EM::Xmpp
       end
       class Mucuser < Bit
         include Contexts::Mucuser
+      end
+      class Ping < Bit
+        include Contexts::Ping
       end
     end
 

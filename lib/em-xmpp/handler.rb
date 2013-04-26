@@ -3,6 +3,7 @@ require 'em-xmpp/namespaces'
 require 'em-xmpp/context'
 require 'em-xmpp/stanza_matcher'
 require 'em-xmpp/stanza_handler'
+require 'em-xmpp/xml_builder'
 require 'base64'
 require 'sasl/base'
 require 'sasl'
@@ -10,6 +11,7 @@ require 'sasl'
 module EM::Xmpp
   class Handler
     include Namespaces
+		include XmlBuilder
 
     def initialize(conn)
       @connection         = conn
@@ -17,7 +19,7 @@ module EM::Xmpp
       @decorator_handlers = []
       @exception_handlers = []
 
-      stack_decorators
+      #stack_decorators
     end
 
     # wraps the stanza in a context and calls handle_context
@@ -26,7 +28,7 @@ module EM::Xmpp
     end
 
     private
-
+=begin
     def stack_decorators
       on_presence_decorator do |ctx| 
         presence = ctx.bit!(:presence) 
@@ -100,7 +102,7 @@ module EM::Xmpp
         ctx
       end
     end
-
+=end
     def add_decorator_handler(handler)
       @decorator_handlers << handler
     end
@@ -273,63 +275,73 @@ module EM::Xmpp
       on_exception(:anything) do |ctx|
         raise ctx['error']
       end
-      on('//xmlns:starttls', {'xmlns' => TLS}) do |ctx|
-        @connection.ask_for_tls 
-        ctx.delete_xpath_handler!.done!
-      end
 
-      on('//xmlns:proceed', {'xmlns' => TLS }) do |ctx|
-        @connection.start_using_tls_and_reset_stream
-        ctx.delete_xpath_handler!.done!
-      end
-
-      on('//xmlns:mechanisms', {'xmlns' => SASL}) do |ctx|
-        search = ctx.xpath('//xmlns:mechanisms', {'xmlns' => SASL})
-        if search.first
-          mechanisms = search.first.children.map(&:content)
-          start_sasl mechanisms
+      if @connection.component?
+        on('//xmlns:handshake', {}) do |ctx|
+          @connection.negotiation_finished
           ctx.delete_xpath_handler!.done!
-        else
-          raise RuntimeError, "how come there is no mechanism node?"
-        end
-      end
-
-      on('//xmlns:challenge', {'xmlns' => SASL}) do |ctx|
-        sasl_step ctx.stanza
-        ctx.done!
-      end
-
-      on('//xmlns:success', {'xmlns' => SASL}) do |ctx|
-        @connection.restart_xml_stream
-        ctx.delete_xpath_handler!.done!
-      end
-
-      on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
-        bind_to_resource  
-        ctx.delete_xpath_handler!.done!
-      end
-
-      on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
-        jid  = extract_jid ctx.stanza
-
-        if jid
-          @connection.jid_received jid 
-          start_session
-        else
-          raise RuntimeError, "no jid despite binding"
         end
 
-        ctx.delete_xpath_handler!.done!
-      end
+      else
+        on('//xmlns:starttls', {'xmlns' => TLS}) do |ctx|
+          @connection.ask_for_tls
+          ctx.delete_xpath_handler!.done!
+        end
 
-      on('//xmlns:session', {'xmlns' => Session}) do |ctx|
-        @connection.negotiation_finished
-        ctx.delete_xpath_handler!.done!
-      end
+        on('//xmlns:proceed', {'xmlns' => TLS }) do |ctx|
+          @connection.start_using_tls_and_reset_stream
+          ctx.delete_xpath_handler!.done!
+        end
 
-      on('//xmlns:failure', {'xmlns' => SASL}) do |ctx|
-        @connection.negotiation_failed(ctx.stanza)
-        ctx.done!
+        on('//xmlns:mechanisms', {'xmlns' => SASL}) do |ctx|
+          search = ctx.xpath('//xmlns:mechanisms', {'xmlns' => SASL})
+          if search.first
+            mechanisms = search.first.children.map(&:content)
+            start_sasl mechanisms
+            ctx.delete_xpath_handler!.done!
+          else
+            raise RuntimeError, "how come there is no mechanism node?"
+          end
+        end
+
+        on('//xmlns:challenge', {'xmlns' => SASL}) do |ctx|
+          sasl_step ctx.stanza
+          ctx.done!
+        end
+
+        on('//xmlns:success', {'xmlns' => SASL}) do |ctx|
+          @connection.restart_xml_stream
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
+          bind_to_resource
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:bind', {'xmlns' => Bind}) do |ctx|
+          jid  = extract_jid ctx.stanza
+
+          if jid
+            @connection.jid_received jid
+            start_session
+          else
+            raise RuntimeError, "no jid despite binding"
+          end
+
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:session', {'xmlns' => Session}) do |ctx|
+          @connection.negotiation_finished
+          ctx.delete_xpath_handler!.done!
+        end
+
+        on('//xmlns:failure', {'xmlns' => SASL}) do |ctx|
+          @connection.negotiation_failed(ctx.stanza)
+          ctx.done!
+        end
+
       end
 
       on(:anything) do |ctx|
@@ -345,17 +357,16 @@ module EM::Xmpp
     end
 
     def bind_to_resource(wanted_res=nil)
-      c.send_stanza(c.iq_stanza('type' => 'set') do |x|
-        x.bind('xmlns' => Bind) do |y|
-          y.resource(wanted_res) if wanted_res
-        end
-      end)
+      c.send_stanza(c.iq_stanza({'type' => 'set'},
+					x('bind',{'xmlns' => Bind},
+            x_if(wanted_res,'resource',wanted_res)
+					)
+				)
+			)
     end
 
     def start_session
-      session_request = c.iq_stanza('type' => 'set', 'to' => jid.domain) do |x|
-        x.session('xmlns' => Session) 
-      end
+      session_request = c.iq_stanza({'type' => 'set', 'to' => jid.domain}, x('session','xmlns' => Session))
 
       c.send_stanza(session_request) do |ctx|
         if ctx.bit!(:stanza).type == 'result'
@@ -385,13 +396,7 @@ module EM::Xmpp
     end
 
     def reply_sasl(msg, val=nil, mech=nil)
-      c.send_xml do |x|
-        if val
-          x.send(msg, val, {'xmlns' => SASL, 'mechanism' => mech})
-        else
-          x.send(msg,  {'xmlns' => SASL, 'mechanism' => mech})
-        end
-      end
+      c.send_xml(msg,  val, 'xmlns' => SASL, 'mechanism' => mech)
     end
 
   end
