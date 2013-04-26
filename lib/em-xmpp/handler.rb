@@ -19,7 +19,7 @@ module EM::Xmpp
       @decorator_handlers = []
       @exception_handlers = []
 
-      stack_decorators
+      #stack_decorators
     end
 
     # wraps the stanza in a context and calls handle_context
@@ -28,7 +28,7 @@ module EM::Xmpp
     end
 
     private
-
+=begin
     def stack_decorators
       on_presence_decorator do |ctx| 
         presence = ctx.bit!(:presence) 
@@ -102,7 +102,7 @@ module EM::Xmpp
         ctx
       end
     end
-
+=end
     def add_decorator_handler(handler)
       @decorator_handlers << handler
     end
