@@ -5,6 +5,7 @@ require 'em-xmpp/handler'
 require 'em-xmpp/jid'
 require 'em-xmpp/entity'
 require 'em-xmpp/cert_store'
+require 'em-xmpp/component'
 require 'eventmachine'
 require 'fiber'
 
@@ -17,6 +18,8 @@ module EM::Xmpp
 
     def initialize(jid, pass, mod=nil, cfg={})
       @jid        = jid
+      @component  = jid.node.nil?
+      self.extend Component if component?
       @pass       = pass.dup.freeze
       self.extend mod if mod
       certdir     = cfg[:certificates]
@@ -26,6 +29,10 @@ module EM::Xmpp
                     else
                       nil
                     end
+    end
+
+    def component?
+      @component
     end
 
     def post_init
@@ -55,7 +62,7 @@ module EM::Xmpp
     def negotiation_finished
       @pass    = nil
       @handler = Routine.new self
-      send_stanza presence_stanza()
+      send_stanza presence_stanza() unless component?
       framework_ready if respond_to? :framework_ready
       ready
     end
@@ -63,8 +70,6 @@ module EM::Xmpp
     def negotiation_failed(node)
       raise RuntimeError, "could not negotiate a stream:\n#{node}"
     end
-
-    OutgoingStanza = Struct.new(:xml, :params)
 
     def default_presence_params
       {}
@@ -78,28 +83,16 @@ module EM::Xmpp
       {'type' => 'get', 'id' => "em-xmpp.#{rand(65535)}"}
     end
 
-    def presence_stanza(params={}, &blk)
-      params = default_presence_params.merge(params)
-      xml = build_xml do |x|
-        x.presence(params, &blk)
-      end
-      OutgoingStanza.new xml, params
+    def presence_stanza(*args)
+      OutgoingStanza.new('presence', default_presence_params, *args)
     end
 
-    def message_stanza(params={}, &blk)
-      params = default_message_params.merge(params)
-      xml = build_xml do |x|
-        x.message(params, &blk)
-      end
-      OutgoingStanza.new xml, params
+    def message_stanza(*args)
+      OutgoingStanza.new('message',default_message_params,*args)
     end
 
-    def iq_stanza(params={}, &blk)
-      params = default_iq_params.merge(params)
-      xml = build_xml do |x|
-        x.iq(params, &blk)
-      end
-      OutgoingStanza.new xml, params
+    def iq_stanza(*args)
+      OutgoingStanza.new('iq', default_iq_params, *args)
     end
 
     def send_stanza(stanza)

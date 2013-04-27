@@ -1,11 +1,13 @@
 
 require 'em-xmpp/jid'
 require 'em-xmpp/namespaces'
+require 'em-xmpp/xml_builder'
 require 'fiber'
 
 module EM::Xmpp
   class Entity
     include Namespaces
+    include XmlBuilder
     attr_reader :jid, :connection
 
     def initialize(connection, jid)
@@ -55,11 +57,11 @@ module EM::Xmpp
     end
 
     # sends some plain message to the entity (use type = 'chat')
-    def say(body, type='chat', xmlproc=nil, &blk)
-      msg = connection.message_stanza(:to => jid, :type => type) do |xml|
-        xml.body body
-        xmlproc.call xml if xmlproc
-      end
+    def say(body, type='chat', *args, &blk)
+      msg = connection.message_stanza({:to => jid, :type => type},
+        x('body',body),
+        *args
+      )
       connection.send_stanza msg, &blk
     end
 
@@ -84,14 +86,12 @@ module EM::Xmpp
       item_fields = {:jid => jid.bare}
       item_fields[:name] = display_name if display_name
 
-      query = connection.iq_stanza(:type => 'set') do |iq|
-        iq.query(:xmlns => Roster) do |q|
-          q.item item_fields
-          groups.each do |grp|
-            q.group grp
-          end
-        end
-      end
+      query = connection.iq_stanza({:type => 'set'},
+				x('query',{:xmlns => Roster},
+					x('item',item_fields),
+					groups.map { |grp| x('group',grp) }
+				)
+			)
 
       send_iq_stanza_fibered query
     end
@@ -100,11 +100,11 @@ module EM::Xmpp
     def remove_from_roster
       item_fields = {:jid => jid.bare, :subscription => 'remove'}
 
-      query = connection.iq_stanza(:type => 'set') do |iq|
-        iq.query(:xmlns => Roster) do |q|
-          q.item item_fields
-        end
-      end
+      query = connection.iq_stanza({:type => 'set'},
+				x('query',{:xmlns => Roster},
+					x('item',item_fields)
+				)
+			)
 
       send_iq_stanza_fibered query
     end
@@ -114,18 +114,14 @@ module EM::Xmpp
     def discover_infos(node=nil)
       hash = {'xmlns' => Namespaces::DiscoverInfos}
       hash['node'] = node if node
-      iq = connection.iq_stanza('to'=>jid) do |xml|
-        xml.query(hash)
-      end
+      iq = connection.iq_stanza({'to'=>jid}, x('query', hash))
       send_iq_stanza_fibered iq
     end
 
     # discovers items (disco#items) of an entity
     # can optionally specify a node to discover
     def discover_items(node=nil)
-      iq = connection.iq_stanza('to'=>jid.to_s) do |xml|
-        xml.query('xmlns' => Namespaces::DiscoverItems)
-      end
+      iq = connection.iq_stanza({'to'=>jid.to_s}, x('query', 'xmlns' => Namespaces::DiscoverItems))
       send_iq_stanza_fibered iq
     end
 
@@ -160,7 +156,7 @@ module EM::Xmpp
         ret[:date] = nil #TODO
         ret
       end
-
+			#TODO xml builder
       def negotiation_request(filedesc,sid,form)
         si_args = {'profile'    => EM::Xmpp::Namespaces::FileTransfer,
                    'mime-type'  => filedesc[:mime]
@@ -182,7 +178,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-
+			#TODO xml builder
       def negotiation_reply(reply_id,form)
         iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do |xml|
           xml.si(:xmlns => EM::Xmpp::Namespaces::StreamInitiation) do |si|
@@ -212,7 +208,7 @@ module EM::Xmpp
         publish_data item
         publish_metadata item
       end
-
+			#TODO xml builder
       def publish_data(item)
         iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -225,7 +221,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-
+			#TODO xml builder
       def publish_metadata(item)
         iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -240,7 +236,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-      
+      #TODO xml builder
       def remove
         iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
           xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
@@ -269,22 +265,22 @@ module EM::Xmpp
       # requests the list of subscriptions on this PubSub service
       # returns the iq context for the answer
       def service_subscriptions
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.subscriptions
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('subscriptions')
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
       # requests the list of affiliations for this PubSub service
       # returns the iq context for the answer
       def service_affiliations
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.affiliations
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('affiliations')
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
@@ -295,11 +291,11 @@ module EM::Xmpp
         params['subid'] = subscription_id if subscription_id
         subscribee = connection.jid.bare
 
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'get') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.options({'node' => node_id, 'jid'=>subscribee}.merge(params))
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'get'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('options',{'node' => node_id, 'jid'=>subscribee}.merge(params))
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -310,13 +306,13 @@ module EM::Xmpp
       def configure_subscription(form)
         subscribee = connection.jid.bare
 
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.options({'node' => node_id, 'jid'=>subscribee}) do |options|
-              connection.build_submit_form(options,form)
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('options',{'node' => node_id, 'jid'=>subscribee},
+              connection.build_submit_form(form)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -326,11 +322,11 @@ module EM::Xmpp
       def default_subscription_configuration
         subscribee = connection.jid.bare
         args = {'node' => node_id} if node_id
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'get') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.default(args)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'get'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('default',args)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -341,11 +337,11 @@ module EM::Xmpp
       def subscribe
         subscribee = connection.jid.bare
 
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.subscribe('node' => node_id, 'jid'=>subscribee)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('subscribe','node' => node_id, 'jid'=>subscribee)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -356,14 +352,14 @@ module EM::Xmpp
       def subscribe_and_configure(form)
         subscribee = connection.jid.bare
 
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.subscribe('node' => node_id, 'jid'=>subscribee)
-            sub.options do |options|
-              connection.build_submit_form(options,form)
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('subscribe','node' => node_id, 'jid'=>subscribee),
+            x('options',
+              connection.build_submit_form(form)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -377,11 +373,11 @@ module EM::Xmpp
         params['subid'] = subscription_id if subscription_id
         subscribee = connection.jid.bare
 
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |sub|
-            sub.unsubscribe({'node' => node_id, 'jid'=>subscribee}.merge(params))
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('unsubscribe',{'node' => node_id, 'jid'=>subscribee}.merge(params))
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -394,49 +390,46 @@ module EM::Xmpp
       def items(max_items=nil,item_ids=nil)
         params = {}
         params['max_items'] = max_items if max_items
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |retrieve|
-            retrieve.items({'node' => node_id}.merge(params)) do |items|
-              if item_ids.respond_to?(:each)
-                item_ids.each do |item_id|
-                  items('id' => item_id)
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('items',{'node' => node_id}.merge(params),
+              if item_ids.respond_to?(:map)
+                item_ids.map do |item_id|
+                  x('item','id' => item_id)
                 end
               end
-            end
-          end
-        end
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
 
       # publishes a payload to the pubsub node
-      # if the item_payload responds to :call (e.g., a proc)
-      # then the item_payload will receive :call method with, as unique parameter,
-      # the xml node of the xml builder. this method call should append an entry
-      # node with the payload
-      # otherwise it is just serialized in an entry node
+      # if the item_payload exists
+      # then inserted to item node,
+      # otherwise an entry node with *entry_args inserted
       #
       # item_id is an optional ID to identify the payload, otherwise, the
       # pubsub service will attribute an ID
       #
       # returns the iq context for the answer
-      def publish(item_payload,item_id=nil)
+      def publish(item_payload,item_id=nil,*entry_args)
         params = {}
         params['id'] = item_id if item_id
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.publish(:node => node_id) do |publish|
-              if item_payload.respond_to?(:call)
-                publish.item(params) { |payload| item_payload.call payload }
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('publish',{:node => node_id},
+              x('item',params,
+              if item_payload
+                item_payload
               else
-                publish.item(params) do |item|
-                  item.entry(item_payload)
-                end
+                x('entry',*entry_args)
               end
-
-            end
-          end
-        end
+              )
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -445,13 +438,13 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def retract(item_id=nil)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.retract(:node => node_id) do |retract|
-              retract.item(:id => item_id) 
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('retract',{:node => node_id},
+              x('item',:id => item_id)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -460,11 +453,11 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def create
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.create(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('create',:node => node_id)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -474,11 +467,11 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def purge
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.purge(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('purge',:node => node_id)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -486,37 +479,37 @@ module EM::Xmpp
       # requests the list of subscriptions on this pubsub node (for the owner)
       # returns the iq context for the answer
       def subscriptions
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.subscriptions(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('subscriptions',:node => node_id)
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
       # requests the list of affiliations on this pubsub node (for the owner)
       # returns the iq context for the answer
       def affiliations
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.affiliations(:node => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('affiliations',:node => node_id)
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
       # changes the subscription status of a pubsub node (for the owner)
       # returns the iq context for the answer
       def modify_subscriptions(subs)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.subscriptions(:node => node_id) do |node|
-              subs.each do  |s|
-                node.subscription(:jid => s.jid, :subscription => s.subscription, :subid => s.sub_id)
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('subscriptions',{:node => node_id},
+              subs.map do |s|
+                x('subscription',:jid => s.jid, :subscription => s.subscription, :subid => s.sub_id)
               end
-            end
-          end
-        end
+            )
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
@@ -524,15 +517,15 @@ module EM::Xmpp
       # returns the iq context for the answer
       def modify_affiliations(affs)
         affs = [affs].flatten
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.affiliations(:node => node_id) do |node|
-              affs.each do  |s|
-                node.affiliation(:jid => s.jid, :affiliation => s.affiliation)
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('affiliations',{:node => node_id},
+              affs.map do  |s|
+                x('affiliation',:jid => s.jid, :affiliation => s.affiliation)
               end
-            end
-          end
-        end
+            )
+          )
+        )
         send_iq_stanza_fibered iq
       end
 
@@ -558,13 +551,13 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def delete(redirect_uri=nil)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |pubsub|
-            pubsub.delete(:node => node_id) do |del|
-              del.redirect(:uri => redirect_uri) if redirect_uri
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('delete',{:node => node_id},
+              x_if(redirect_uri,'redirect',:uri => redirect_uri)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -573,14 +566,14 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def create_and_configure(form)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |node|
-            node.create('node' => node_id)
-            node.configure do |options|
-              connection.build_submit_form(options,form)
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSub},
+            x('create','node' => node_id),
+            x('configure',
+              connection.build_submit_form(form)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -590,11 +583,11 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def configuration_options
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
-            node.configure('node' => node_id)
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('configure','node' => node_id)
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -603,13 +596,13 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def configure(form)
-        iq = connection.iq_stanza('to'=>jid.bare,'type'=>'set') do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |node|
-            node.configure('node' => node_id) do |config|
-              connection.build_submit_form(config,form)
-            end
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare,'type'=>'set'},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('configure',{'node' => node_id},
+              connection.build_submit_form(form)
+            )
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -618,11 +611,11 @@ module EM::Xmpp
       #
       # returns the iq context for the answer
       def default_configuration
-        iq = connection.iq_stanza('to'=>jid.bare) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSubOwner) do |sub|
-            sub.default
-          end
-        end
+        iq = connection.iq_stanza({'to'=>jid.bare},
+          x('pubsub',{:xmlns => EM::Xmpp::Namespaces::PubSubOwner},
+            x('default')
+          )
+        )
 
         send_iq_stanza_fibered iq
       end
@@ -645,7 +638,7 @@ module EM::Xmpp
         muc(nil)
       end
 
-      # Join a MUC.
+      # Join a MUC. TODO xml builder
       def join(nick,pass=nil,historysize=0,&blk)
         pres = connection.presence_stanza('to'=> muc(nick).to_s) do |xml|
           xml.password pass if pass
@@ -656,7 +649,7 @@ module EM::Xmpp
         connection.send_stanza pres, &blk
       end
 
-      # Leave a MUC.
+      # Leave a MUC. TODO xml builder
       def part(nick,msg=nil)
         pres = connection.presence_stanza('to'=> muc(nick).to_s,'type'=>'unavailable') do |xml|
           xml.status msg if msg
@@ -669,7 +662,7 @@ module EM::Xmpp
         join(nick)
       end
 
-      # Say some message in the muc.
+      # Say some message in the muc. TODO xml builder
       def say(body, xmlproc=nil, &blk)
         msg = connection.message_stanza(:to => jid, :type => 'groupchat') do |xml|
           xml.body body
@@ -679,7 +672,7 @@ module EM::Xmpp
       end
 
       private
-
+			#TODO xml builder
       def set_role(role,nick,reason=nil,&blk)
         iq = connection.iq_stanza(:to => jid,:type => 'set') do |xml|
           xml.query('xmlns' => Namespaces::MucAdmin) do |q|
@@ -690,7 +683,7 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-
+			#TODO xml builder
       def set_affiliation(affiliation,affiliated_jid,reason=nil,&blk)
         iq = connection.iq_stanza(:to => jid,:type => 'set') do |xml|
           xml.query('xmlns' => Namespaces::MucAdmin) do |q|
@@ -813,7 +806,7 @@ module EM::Xmpp
         raise NotImplementedError
       end
 
-      # sets the room subject (Message Of The Day)
+      # sets the room subject (Message Of The Day) TODO xml builder
       def motd(subject,&blk)
         msg = connection.message_stanza(:to => jid) do |xml|
           xml.subject subject
@@ -821,7 +814,7 @@ module EM::Xmpp
         connection.send_stanza msg, &blk
       end
 
-      # invites someone (based on his jid) to the MUC
+      # invites someone (based on his jid) to the MUC TODO xml builder
       def invite(invited_jid,reason="no reason",&blk)
         msg = connection.message_stanza(:to => jid) do |xml|
           xml.x('xmlns' => Namespaces::MucUser) do |x|
