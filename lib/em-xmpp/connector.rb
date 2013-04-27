@@ -1,6 +1,5 @@
 
 require 'nokogiri'
-require 'eventmachine'
 require 'em-xmpp/context'
 require 'em-xmpp/namespaces'
 require 'em-xmpp/resolver'
@@ -21,34 +20,6 @@ module EM::Xmpp
       end
     end
 
-    def self.included(obj)
-      obj.extend ClassMethods
-    end
-
-    module ClassMethods
-      def start(jid, pass=nil, mod=nil, cfg={}, server=nil, port=5222, &blk)
-        jid = JID.parse jid
-        if server.nil?
-          record = Resolver.resolve jid.domain
-          if record
-            server = record.target.to_s
-            port   = record.port
-          else
-            server = jid.domain
-          end
-        end
-
-        EM.connect(server, port, self, jid, pass, mod, cfg, &blk)
-      end
-    end
-
-    extend ClassMethods
-
-    def send_raw(data)
-      puts ">> out\n#{data}\n" if $DEBUG
-      send_data data
-    end
-
     def send_xml(&blk)
       data = build_xml(&blk)
       send_raw data
@@ -56,10 +27,10 @@ module EM::Xmpp
 
     def restart_xml_stream
       @xml_parser.document.recipient = nil
-      post_init
+      prepare_parser!
     end
 
-    def post_init
+    def prepare_parser!
       doc = ForwardingDocument.new
       doc.recipient = self
       @xml_parser   = Nokogiri::XML::SAX::PushParser.new doc
@@ -70,13 +41,8 @@ module EM::Xmpp
       open_xml_stream
     end
 
-    def receive_data(dat)
-      puts "<< in\n#{dat}\n" if $DEBUG
+    def receive_raw(dat)
       @xml_parser << dat
-    end
-
-    def unbind
-      puts "**** unbound ****" if $DEBUG
     end
 
     def build_xml(&blk)
@@ -233,8 +199,12 @@ module EM::Xmpp
     end
 
     def start_using_tls_and_reset_stream
-      start_tls(:verify_peer => false)
+      initiate_tls
       restart_xml_stream
+    end
+
+    def initiate_tls
+      raise NotImplementedError
     end
 
     def ssl_verify_peer(pem)
