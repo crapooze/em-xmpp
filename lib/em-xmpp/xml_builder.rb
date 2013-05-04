@@ -8,12 +8,15 @@ module Ox
 		#   @param [String|Element|Array] children text, child element or array of elements
 		def x(name, *args)
 			n = Element.new(name)
-      *yielded = if block_given?
+      yielded = if block_given?
                   yield
                 else 
                   []
                 end
-      values = *args + yielded
+      unless yielded.is_a?(Array)
+        yielded = [yielded]
+      end
+      values = args + yielded
 
 			values.each do |val|
 				case val
