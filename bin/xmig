@@ -1,5 +1,5 @@
 $LOAD_PATH.unshift './lib'
-require 'em-xmpp'
+require 'em-xmpp/connection'
 require 'em-xmpp/helpers'
 require 'em-xmpp/conversation'
 
@@ -46,7 +46,7 @@ module Command extend self
   end
 
   def print_context_dataforms(ctx)
-    df = ctx.bit!(:dataforms)
+    df = ctx.bit(:dataforms)
     df.x_forms.each do |form|
       print_dataform form
     end
@@ -116,7 +116,7 @@ module Command extend self
       lambda do |client|
         puts "=== PubSub Subscriptions on #{jid} (#{node}) ==="
         ctx = client.entity(jid).pubsub(node).service_subscriptions
-        ctx.bit!(:pubsub).subscriptions.each do |s|
+        ctx.bit(:pubsub).subscriptions.each do |s|
           puts "#{s.node} -- #{s.subscription} (#{s.sub_id})"
         end
       end
@@ -125,7 +125,7 @@ module Command extend self
       lambda do |client|
         puts "=== PubSub Affiliations on #{jid} (#{node}) ==="
         ctx = client.entity(jid).pubsub(node).service_affiliations
-        ctx.bit!(:pubsub).affiliations.each do |s|
+        ctx.bit(:pubsub).affiliations.each do |s|
           puts "#{s.node} (#{s.affiliation})"
         end
       end
@@ -182,7 +182,7 @@ module Command extend self
       lambda do |client|
         puts "publishing #{payload.size} bytes to #{jid} (#{node})"
         ctx = client.entity(jid).pubsub(node).publish(payload)
-        ctx.bit!(:pubsub).items.each do |item|
+        ctx.bit(:pubsub).items.each do |item|
           puts "published: #{item.item_id} at #{item.node}"
         end
       end
@@ -215,7 +215,7 @@ module Command extend self
       lambda do |client|
         puts "=== PubSub Subscriptions on #{jid} ==="
         ctx = client.entity(jid).pubsub(node).subscriptions
-        ctx.bit!(:pubsubowner).subscriptions.each do |s|
+        ctx.bit(:pubsubowner).subscriptions.each do |s|
           puts "#{s.jid} -- #{s.subscription} (#{s.sub_id})"
         end
       end
@@ -224,7 +224,7 @@ module Command extend self
       lambda do |client|
         puts "=== PubSub Affiliations on #{jid} ==="
         ctx = client.entity(jid).pubsub(node).affiliations
-        ctx.bit!(:pubsubowner).affiliations.each do |s|
+        ctx.bit(:pubsubowner).affiliations.each do |s|
           puts "#{s.jid} (#{s.affiliation})"
         end
       end
@@ -484,11 +484,11 @@ module Command extend self
         disco = client.entity(dst).discover_infos(node)
 
         puts "=== Identities ==="
-        disco.bit!(:discoinfos).identities.each do |i|
+        disco.bit(:discoinfos).identities.each do |i|
           puts "#{i.category}/#{i.type}: #{i.name || "_"}"
         end
         puts "=== Features ==="
-        disco.bit!(:discoinfos).features.each do |f|
+        disco.bit(:discoinfos).features.each do |f|
           puts "#{f.var}"
         end
       end
@@ -500,7 +500,7 @@ module Command extend self
         disco = client.entity(dst).discover_items(node)
 
         puts "=== Items ==="
-        disco.bit!(:discoitems).items.each do |i|
+        disco.bit(:discoitems).items.each do |i|
           puts "#{i.entity} (#{i.node}) -- #{i.name || i.entity}"
         end
       end
@@ -607,7 +607,7 @@ module RosterClient
 
     # Signal presence subscriptions
     on_presence do |ctx|
-      pre = ctx.bit!(:presence)
+      pre = ctx.bit(:presence)
       if pre.subscription_request?
         puts "=== Presence subscription request from: #{pre.from.bare}"
         ctx.done!
@@ -617,7 +617,7 @@ module RosterClient
 
     # Signal people arriving and leaving
     on_presence do |ctx|
-      pre = ctx.bit!(:presence)
+      pre = ctx.bit(:presence)
       puts "=== Presence #{pre.from}: #{pre.type}"
       ctx.done!
     end
@@ -954,7 +954,7 @@ module RosterClient
   end
 
   def default_dataform_conversation(ctx, banner, &action)
-    ctx.env['dataform'] = ctx.bit!(:dataforms).form
+    ctx.env['dataform'] = ctx.bit(:dataforms).form
     dataform_conversation(ctx) do |step|
       step.on(:start) do
         puts banner
