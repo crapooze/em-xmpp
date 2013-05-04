@@ -17,16 +17,20 @@ module Ox
         same_ns    = elem.xmlns == wanted_ns
 
         matching = same_value & same_ns
+      end
 
+      def find(elem, ns_mapping)
         ret = []
-        ret << elem if matching
+        ret << elem if match(elem, ns_mapping)
 
         case type
         when 'normal'
-          #nothing
+          elem.children.each do |n|
+            ret << n if match(n, ns_mapping)
+          end
         when 'relative', 'anywhere' #TODO: for anywhere, should go to the root first, is that even possible?
           elem.children.each do |n|
-            match(n, ns_mapping).each {|m| ret << m}
+            find(n, ns_mapping).each {|m| ret << m}
           end
         else
           raise NotImplementedError
@@ -59,11 +63,12 @@ module Ox
       queries = parse_xpath(path)
       elems = []
       queries.each do |q|
-        q.match(self,ns_mapping).each do |n|
+        q.find(self,ns_mapping).each do |n|
           elems << n
         end
       end
-      elems.uniq
+      ret = elems.uniq
+      ret
 		end
 
 		def children
