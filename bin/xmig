@@ -366,13 +366,15 @@ module Command extend self
 
         client.entity(dst).say("",'chat', xmlproc)
         client.on_iq do |ctx|
-          bob = ctx.bit(:bob)
-          if bob and (bob.cid == item.cid)
-            puts "sending bob"
-            iq = bob.reply(item)
-            client.send_stanza iq
-            ctx.delete_xpath_handler!
-            ctx.done!
+          if ctx.bit?(:bob)
+            bob = ctx.bit(:bob)
+            if (bob.cid == item.cid)
+              puts "sending bob"
+              iq = bob.reply(item)
+              client.send_stanza iq
+              ctx.delete_xpath_handler!
+              ctx.done!
+            end
           end
           ctx
         end
@@ -594,6 +596,8 @@ module RosterClient
   attr_reader :queue
 
   def ready
+    @handler.enable_default_stack_decorators!
+
     @show_xml = false
     puts "***** #{@jid} ready"
     user_data.each{|c| handle_command c}
@@ -624,8 +628,8 @@ module RosterClient
 
     # Acknowledge roster change 
     on_iq do |ctx|
-      roster = ctx.bit(:roster)
-      if roster
+      if ctx.bit?(:roster)
+        roster = ctx.bit(:roster)
         if roster.type == 'set'
           puts "=== Roster change ==="
           roster.items.each do |item|
@@ -640,8 +644,8 @@ module RosterClient
 
     # Replies to item queries
     on_iq do |ctx|
-      query = ctx.bit(:discoitems)
-      if query
+      if ctx.bit?(:discoitems)
+        query = ctx.bit(:discoitems)
         list = items(query.to,query.node)
         puts "==== #{query.from} discovers #{list.size} items at node #{query.node} ==="
         reply = query.reply do |iq|
@@ -661,9 +665,8 @@ module RosterClient
 
     # Replies to command queries
     on_iq do |ctx|
-      query = ctx.bit(:command)
-
-      if query
+      if ctx.bit?(:command)
+        query = ctx.bit(:command)
         if query.sessionid
           key = "command:#{query.from}:#{query.node}:#{query.sessionid}"
           conv = conversation(key)
@@ -720,10 +723,10 @@ module RosterClient
 
     # Prints Pubsub event
     on_message do |ctx|
-      event = ctx.bit(:pubsubevent)
-      delay = ctx.bit(:delay)
-      stamp = delay.stamp if delay
-      if event
+      if ctx.bit?(:pubsubevent)
+        event = ctx.bit(:pubsubevent)
+        delay = ctx.bit(:delay)
+        stamp = delay.stamp
         puts "=== PubSub event #{event.service} #{stamp} ==="
         if event.items_node #oddly enough, retractions fall in items_node
           items       = event.items
@@ -763,8 +766,8 @@ module RosterClient
         ctx.done!
       end
 
-      event = ctx.bit(:pubsub)
-      if event
+      if ctx.bit?(:pubsub)
+        event = ctx.bit(:pubsub)
         puts "=== PubSub #{event.service} ==="
         event.subscriptions.each do |sub|
           puts "subscription of #{sub.jid} (#{sub.sub_id}) status is now #{sub.subscription} for #{sub.node}"
@@ -776,8 +779,8 @@ module RosterClient
     end
 
     on_iq do |ctx|
-      si =  ctx.bit(:streaminitiation)
-      if si
+      if ctx.bit?(:streaminitiation)
+        si =  ctx.bit(:streaminitiation)
         puts "=== FileTransfer request from #{si.from}:#{si.id} ==="
         puts "file details: #{si.file_name} (#{si.file_size} bytes) (mime:#{si.mime_type})"
         puts "description: #{si.description}" if si.description
@@ -796,8 +799,8 @@ module RosterClient
     end
 
     on_iq do |ctx|
-      ibb = ctx.bit(:ibb)
-      if ibb
+      if ctx.bit?(:ibb)
+        ibb = ctx.bit(:ibb)
         key = ibb_conversation_key(ibb)
 
         if ibb.open_node

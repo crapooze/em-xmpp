@@ -18,8 +18,6 @@ module EM::Xmpp
       @handlers           = []
       @decorator_handlers = []
       @exception_handlers = []
-
-      #stack_decorators
     end
 
     # wraps the stanza in a context and calls handle_context
@@ -27,82 +25,82 @@ module EM::Xmpp
       handle_context Context.new(@connection, stanza)
     end
 
-    private
-=begin
-    def stack_decorators
+    def enable_default_stack_decorators!
       on_presence_decorator do |ctx| 
-        presence = ctx.bit!(:presence) 
-        ctx.bit!(:error) if presence.error?
+        presence = ctx.bit(:presence) 
+        ctx.bit(:error) if presence.error?
         ctx
       end
       on_message_decorator  do |ctx| 
-        msg = ctx.bit!(:message) 
-        ctx.bit!(:error) if msg.error?
+        msg = ctx.bit(:message) 
+        ctx.bit(:error) if msg.error?
         ctx
       end
       on_iq_decorator       do |ctx| 
-        iq = ctx.bit!(:iq) 
-        ctx.bit!(:error) if iq.error?
+        iq = ctx.bit(:iq) 
+        ctx.bit(:error) if iq.error?
         ctx
       end
       on_decorator('//xmlns:pubsub', 'xmlns' => PubSub) do |ctx|
-        ctx.bit!(:pubsub)
+        ctx.bit(:pubsub)
         ctx
       end
       on_decorator('//xmlns:event', 'xmlns' => PubSubEvent) do |ctx|
-        ctx.bit!(:pubsubevent)
+        ctx.bit(:pubsubevent)
         ctx
       end
       on_decorator('//xmlns:delay', 'xmlns' => Delay) do |ctx|
-        ctx.bit!(:delay)
+        ctx.bit(:delay)
         ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => DiscoverInfos) do |ctx|
-        ctx.bit!(:discoinfos)
+        ctx.bit(:discoinfos)
         ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => DiscoverItems) do |ctx|
-        ctx.bit!(:discoitems)
+        ctx.bit(:discoitems)
         ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => Roster) do |ctx|
-        ctx.bit!(:roster)
+        ctx.bit(:roster)
         ctx
       end
       on_decorator('//xmlns:command', 'xmlns' => Commands) do |ctx|
-        ctx.bit!(:command)
+        ctx.bit(:command)
         ctx
       end
       on_decorator('//xmlns:data', 'xmlns' => BoB) do |ctx|
-        ctx.bit!(:bob)
+        ctx.bit(:bob)
         ctx
       end
       on_decorator('//xmlns:x', 'xmlns' => DataForms) do |ctx|
-        ctx.bit!(:dataforms)
+        ctx.bit(:dataforms)
         ctx
       end
       on_decorator('//xmlns:nick', 'xmlns' => Nick) do |ctx|
-        ctx.bit!(:nickname)
+        ctx.bit(:nickname)
         ctx
       end
       on_decorator('//xmlns:x', 'xmlns' => MucUser) do |ctx|
-        ctx.bit!(:mucuser)
+        ctx.bit(:mucuser)
         ctx
       end
       on_decorator('//xmlns:si', 'xmlns' => StreamInitiation) do |ctx|
-        ctx.bit!(:streaminitiation)
+        ctx.bit(:streaminitiation)
         ctx
       end
       on_decorator('//xmlns:open | //xmlns:data | //xmlns:close', 'xmlns' => IBB) do |ctx|
-        ctx.bit!(:ibb)
+        ctx.bit(:ibb)
         ctx
       end
       on_decorator('//xmlns:query', 'xmlns' => ByteStreams) do |ctx|
-        ctx.bit!(:bytestreams)
+        ctx.bit(:bytestreams)
         ctx
       end
     end
-=end
+
+    private
+
     def add_decorator_handler(handler)
       @decorator_handlers << handler
     end
