@@ -156,7 +156,7 @@ module EM::Xmpp
         ret[:date] = nil #TODO
         ret
       end
-			#TODO xml builder
+
       def negotiation_request(filedesc,sid,form)
         si_args = {'profile'    => EM::Xmpp::Namespaces::FileTransfer,
                    'mime-type'  => filedesc[:mime]
@@ -167,23 +167,23 @@ module EM::Xmpp
           'date' => filedesc[:date]
         }
         iq = connection.iq_stanza('to'=>jid,'type'=>'set') do |xml|
-          xml.si({:xmlns => EM::Xmpp::Namespaces::StreamInitiation, :id => sid}.merge(si_args)) do |si|
-            si.file({:xmlns => EM::Xmpp::Namespaces::FileTransfer}.merge(file_args)) do |file|
-              file.desc filedesc[:description]
+          x('si',{:xmlns => EM::Xmpp::Namespaces::StreamInitiation, :id => sid}.merge(si_args)) do
+            x('file', {:xmlns => EM::Xmpp::Namespaces::FileTransfer}.merge(file_args)) do
+              x('desc', filedesc[:description])
             end
-            si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
-              connection.build_submit_form(feat,form)
+            x('feature', :xmlns => EM::Xmpp::Namespaces::FeatureNeg) do
+              connection.build_submit_form(form)
             end
           end
         end
         send_iq_stanza_fibered iq
       end
-			#TODO xml builder
+
       def negotiation_reply(reply_id,form)
-        iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do |xml|
-          xml.si(:xmlns => EM::Xmpp::Namespaces::StreamInitiation) do |si|
-            si.feature(:xmlns => EM::Xmpp::Namespaces::FeatureNeg) do |feat|
-              connection.build_submit_form(feat,form)
+        iq = connection.iq_stanza('to'=>jid,'type'=>'result','id'=>reply_id) do
+          x('si', :xmlns => EM::Xmpp::Namespaces::StreamInitiation) do
+            x('feature', :xmlns => EM::Xmpp::Namespaces::FeatureNeg) do
+              connection.build_submit_form(form)
             end
           end
         end
@@ -638,21 +638,23 @@ module EM::Xmpp
         muc(nil)
       end
 
-      # Join a MUC. TODO xml builder
+      # Join a MUC.
       def join(nick,pass=nil,historysize=0,&blk)
-        pres = connection.presence_stanza('to'=> muc(nick).to_s) do |xml|
-          xml.password pass if pass
-          xml.x('xmlns' => Namespaces::Muc) do |x|
-            x.history('maxchars' => historysize.to_s)
+        pres = connection.presence_stanza('to'=> muc(nick).to_s) do
+          nodes = []
+          nodes << x('password', pass) if pass
+          nodes << x('x', 'xmlns' => Namespaces::Muc) do
+            x('history', 'maxchars' => historysize.to_s)
           end
+          nodes
         end
         connection.send_stanza pres, &blk
       end
 
-      # Leave a MUC. TODO xml builder
+      # Leave a MUC.
       def part(nick,msg=nil)
-        pres = connection.presence_stanza('to'=> muc(nick).to_s,'type'=>'unavailable') do |xml|
-          xml.status msg if msg
+        pres = connection.presence_stanza('to'=> muc(nick).to_s,'type'=>'unavailable') do
+          x('status', msg) if msg
         end
         connection.send_stanza pres
       end
@@ -662,33 +664,34 @@ module EM::Xmpp
         join(nick)
       end
 
-      # Say some message in the muc. TODO xml builder
+      # Say some message in the muc. 
       def say(body, xmlproc=nil, &blk)
-        msg = connection.message_stanza(:to => jid, :type => 'groupchat') do |xml|
-          xml.body body
-          xmlproc.call xml if xmlproc
+        msg = connection.message_stanza(:to => jid, :type => 'groupchat') do
+          nodes = []
+          nodes << x('body',body,&xmlproc)
+          nodes << xmlproc.call if xmlproc
+          nodes
         end
         connection.send_stanza msg, &blk
       end
 
       private
-			#TODO xml builder
       def set_role(role,nick,reason=nil,&blk)
-        iq = connection.iq_stanza(:to => jid,:type => 'set') do |xml|
-          xml.query('xmlns' => Namespaces::MucAdmin) do |q|
-            q.item('nick' => nick, 'role' => role) do |r|
-              r.reason reason if reason
+        iq = connection.iq_stanza(:to => jid,:type => 'set') do
+          x('query', 'xmlns' => Namespaces::MucAdmin) do
+            x('item', 'nick' => nick, 'role' => role) do
+              x('reason',reason) if reason
             end
           end
         end
         send_iq_stanza_fibered iq
       end
-			#TODO xml builder
+
       def set_affiliation(affiliation,affiliated_jid,reason=nil,&blk)
-        iq = connection.iq_stanza(:to => jid,:type => 'set') do |xml|
-          xml.query('xmlns' => Namespaces::MucAdmin) do |q|
-            q.item('affiliation' => affiliation, 'jid' => affiliated_jid)  do |r|
-              r.reason reason if reason
+        iq = connection.iq_stanza(:to => jid,:type => 'set') do
+          x('query','xmlns' => Namespaces::MucAdmin) do
+            x('item', 'affiliation' => affiliation, 'jid' => affiliated_jid) do
+              x('reason', reason) if reason
             end
           end
         end
@@ -806,20 +809,20 @@ module EM::Xmpp
         raise NotImplementedError
       end
 
-      # sets the room subject (Message Of The Day) TODO xml builder
+      # sets the room subject (Message Of The Day)
       def motd(subject,&blk)
-        msg = connection.message_stanza(:to => jid) do |xml|
-          xml.subject subject
+        msg = connection.message_stanza(:to => jid) do
+          x('subject',subject)
         end
         connection.send_stanza msg, &blk
       end
 
-      # invites someone (based on his jid) to the MUC TODO xml builder
+      # invites someone (based on his jid) to the MUC
       def invite(invited_jid,reason="no reason",&blk)
-        msg = connection.message_stanza(:to => jid) do |xml|
-          xml.x('xmlns' => Namespaces::MucUser) do |x|
-            x.invite('to' => invited_jid.to_s) do |invite|
-              invite.reason reason
+        msg = connection.message_stanza(:to => jid) do
+          x('x', 'xmlns' => Namespaces::MucUser) do
+            x('invite', 'to' => invited_jid.to_s) do
+              x('reason', reason) if reason
             end
           end
         end
