@@ -22,14 +22,13 @@ module Ox
       def find(elem, ns_mapping)
         ret = []
         ret << elem if match(elem, ns_mapping)
-
         case type
         when 'normal'
-          elem.children.each do |n|
+          elem.nodes.reject{|n| n.is_a?(String)}.each do |n|
             ret << n if match(n, ns_mapping)
           end
         when 'relative', 'anywhere' #TODO: for anywhere, should go to the root first, is that even possible?
-          elem.children.each do |n|
+          elem.nodes.reject{|n| n.is_a?(String)}.each do |n|
             find(n, ns_mapping).each {|m| ret << m}
           end
         else
@@ -52,9 +51,12 @@ module Ox
                else
                  'normal'
                end
-        rest = str.tr('/','')
-        ns,name = rest.split(':',2)
-        name,ns = ns,nil unless name
+        ns,name = str.split(':',2)
+        if name
+          ns = ns.tr('/.','')
+        else
+          name,ns = ns,nil unless name
+        end
         XPathSubset::Query.new(kind, name, ns)
       end
     end
@@ -67,8 +69,7 @@ module Ox
           elems << n
         end
       end
-      ret = elems.uniq
-      ret
+      elems.uniq
 		end
 
 		def children
