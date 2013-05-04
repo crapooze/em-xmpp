@@ -9,7 +9,9 @@ end
 
 jid     = ARGV.first
 pass    = ARGV[1]
-certdir = ARGV[2] 
+server = ARGV[2] 
+port = ARGV[3] 
+certdir = ARGV[4] 
 
 module RosterClient
   attr_reader :roster
@@ -84,5 +86,5 @@ end
 cfg = {:certificates => certdir} 
 
 EM.run do
-  conn = EM::Xmpp::Connection.start(jid, pass, RosterClient, cfg) 
+  conn = EM::Xmpp::Connection.start(jid, pass, RosterClient, cfg, server, port) 
 end
