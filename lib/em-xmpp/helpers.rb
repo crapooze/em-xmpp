@@ -1,6 +1,9 @@
 
+require 'em-xmpp/namespaces'
 require 'em-xmpp/nodes'
 require 'em-xmpp/conversation'
+require 'fiber'
+
 module EM::Xmpp
   module Helpers
     include EM::Xmpp::Namespaces

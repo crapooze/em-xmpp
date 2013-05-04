@@ -1,5 +1,5 @@
 $LOAD_PATH.unshift './lib'
-require 'em-xmpp'
+require 'em-xmpp/non-em'
 require 'em-xmpp/helpers'
 
 if ARGV.empty?
