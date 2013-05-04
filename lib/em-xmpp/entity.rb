@@ -208,27 +208,27 @@ module EM::Xmpp
         publish_data item
         publish_metadata item
       end
-			#TODO xml builder
+
       def publish_data(item)
-        iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.publish(:node => EM::Xmpp::Namespaces::AvatarData) do |pub|
-              pub.item(:id => item.id) do |i|
-                i.data({:xmnls => EM::Xmpp::Namespaces::AvatarData}, item.b64)
+        iq = connection.iq_stanza({'type' => 'set','to' => jid}) do
+          x('pubsub',{'xmlns' => EM::Xmpp::Namespaces::PubSub}) do
+            x('publish',:node => EM::Xmpp::Namespaces::AvatarData) do
+              x('item', :id => item.id) do
+                x('data', {:xmnls => EM::Xmpp::Namespaces::AvatarData}, item.b64)
               end
             end
           end
         end
         send_iq_stanza_fibered iq
       end
-			#TODO xml builder
+
       def publish_metadata(item)
-        iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.publish(:node => EM::Xmpp::Namespaces::AvatarMetaData) do |pub|
-              pub.item(:id => item.id) do |i|
-                i.metadata({:xmnls => EM::Xmpp::Namespaces::AvatarMetaData}) do |md|
-                  md.info(:width => item.width, :height => item.height, :bytes => item.bytes, :type => item.mime, :id => item.id)
+        iq = connection.iq_stanza('type' => 'set','to' => jid) do
+          x('pubsub', :xmlns => EM::Xmpp::Namespaces::PubSub) do
+            x('publish', :node => EM::Xmpp::Namespaces::AvatarMetaData) do
+              x('item', :id => item.id) do
+                x('metadata',{:xmnls => EM::Xmpp::Namespaces::AvatarMetaData}) do
+                  x('info', :width => item.width, :height => item.height, :bytes => item.bytes, :type => item.mime, :id => item.id)
                 end
               end
             end
@@ -236,13 +236,13 @@ module EM::Xmpp
         end
         send_iq_stanza_fibered iq
       end
-      #TODO xml builder
+
       def remove
-        iq = connection.iq_stanza('type' => 'set','to' => jid) do |xml|
-          xml.pubsub(:xmlns => EM::Xmpp::Namespaces::PubSub) do |pubsub|
-            pubsub.publish(:node => EM::Xmpp::Namespaces::AvatarMetaData) do |pub|
-              pub.item(:id => "current") do |i|
-                i.metadata(:xmlns => EM::Xmpp::Namespaces::AvatarMetaData)
+        iq = connection.iq_stanza('type' => 'set','to' => jid) do
+          x('pubsub', :xmlns => EM::Xmpp::Namespaces::PubSub) do
+            x('publish', :node => EM::Xmpp::Namespaces::AvatarMetaData) do
+              x('item', :id => "current") do
+                x('metadata', :xmlns => EM::Xmpp::Namespaces::AvatarMetaData)
               end
             end
           end
