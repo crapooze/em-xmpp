@@ -43,6 +43,15 @@ end
 
 module EM::Xmpp
 	module XmlParser
+
+    class ForwardingParser < Nokogiri::XML::SAX::PushParser
+      def initialize(receiver)
+        doc = ForwardingDocument.new
+        doc.recipient = receiver
+        super doc
+      end
+    end
+
     #XML SAX document which delegates its method to a recipient object
     class ForwardingDocument < Nokogiri::XML::SAX::Document
       attr_accessor :recipient
@@ -53,26 +62,6 @@ module EM::Xmpp
           recipient.send(meth2, *args)  if recipient
         end
       end
-    end
-
-    def restart_xml_stream
-      @xml_parser.document.recipient = nil
-      post_init
-    end
-
-    def post_init
-      doc = ForwardingDocument.new
-      doc.recipient = self
-      @xml_parser   = Nokogiri::XML::SAX::PushParser.new doc
-      @stack        = []
-      @stanza       = nil
- 
-      open_xml_stream
-    end
-		
-    def receive_data(dat)
-      puts "<< in\n#{dat}\n" if $DEBUG
-      @xml_parser << dat
     end
 
 		private

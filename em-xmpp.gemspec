@@ -16,5 +16,6 @@ Gem::Specification.new do |gem|
   gem.version       = Em::Xmpp::VERSION
   gem.add_dependency "eventmachine"
   gem.add_dependency "nokogiri"
+  gem.add_dependency "ox"
   gem.add_dependency "ruby-sasl"
 end

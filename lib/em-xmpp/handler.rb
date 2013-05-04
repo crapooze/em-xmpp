@@ -369,7 +369,7 @@ module EM::Xmpp
       session_request = c.iq_stanza({'type' => 'set', 'to' => jid.domain}, x('session','xmlns' => Session))
 
       c.send_stanza(session_request) do |ctx|
-        if ctx.bit!(:stanza).type == 'result'
+        if ctx.bit(:stanza).type == 'result'
           @connection.negotiation_finished
           ctx.delete_xpath_handler!.done!
         else

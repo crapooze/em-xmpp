@@ -4,40 +4,28 @@ require 'em-xmpp/context'
 require 'em-xmpp/namespaces'
 require 'em-xmpp/resolver'
 require 'em-xmpp/xml_parser'
-require 'em-xmpp/xml_builder'
 
 module EM::Xmpp
   module Connector
     include Namespaces
     include XmlParser
-    include XmlBuilder
 
-    def self.included(obj)
-      obj.extend ClassMethods
+    def receive_raw(dat)
+      @xml_parser << dat
     end
 
-    module ClassMethods
-      def start(jid, pass=nil, mod=nil, cfg={}, server=nil, port=5222, &blk)
-        jid = JID.parse jid
-        if server.nil?
-          record = Resolver.resolve jid.domain
-          if record
-            server = record.target.to_s
-            port   = record.port
-          else
-            server = jid.domain
-          end
-        end
+    def prepare_parser!
+      @xml_parser   = ForwardingParser.new self
+      @stack        = []
+      @stanza       = nil
+      @streamdoc    = nil
 
-        EM.connect(server, port, self, jid, pass, mod, cfg, &blk)
-      end
+      open_xml_stream
     end
 
-    extend ClassMethods
-
-    def send_raw(data)
-      puts ">> out\n#{data}\n" if $DEBUG
-      send_data data
+    def restart_xml_stream
+      @xml_parser.document.recipient = nil #make sure we stop receiving methods from the old parser
+      prepare_parser!
     end
 
     def send_xml(*args)
@@ -95,12 +83,16 @@ module EM::Xmpp
     ### TLS World
 
     def ask_for_tls
-     send_xml('starttls', :xmlns => TLS)
+      send_xml('starttls', :xmlns => TLS)
     end
 
     def start_using_tls_and_reset_stream
-      start_tls(:verify_peer => false)
+      initiate_tls
       restart_xml_stream
+    end
+
+    def initiate_tls
+      raise NotImplementedError
     end
 
     def ssl_verify_peer(pem)

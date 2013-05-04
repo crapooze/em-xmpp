@@ -89,11 +89,7 @@ module EM::Xmpp
     end
 
     def bit(klassname)
-      bits[bit_klass_name(klassname)] 
-    end
-
-    def bit!(klassname)
-      ret = bit klassname
+      ret = bits[bit_klass_name(klassname)] 
       unless ret
         klass = if klassname.is_a?(Class)
                   klassname
@@ -104,6 +100,16 @@ module EM::Xmpp
       end
       ret
     end
+
+    def bit!(klassname)
+      if $DEBUG
+        $stderr.puts "EM::Xmpp::Context#bit! is outdated, please use bit (without bang)"
+        line = caller.first
+        $stderr.puts "  caller is here> #{line}"
+      end
+      bit klassname
+    end
+
 
     def bit?(klassname)
       bits.has_key? bit_klass_name(klassname)
