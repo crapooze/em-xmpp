@@ -351,7 +351,7 @@ module EM::Xmpp
 
     def extract_jid(stanza)
       jid = stanza.xpath('//bind:jid', {'bind' => Bind})
-      jid.text if jid.any?
+      jid.first.text if jid.any?
     end
 
     def bind_to_resource(wanted_res=nil)

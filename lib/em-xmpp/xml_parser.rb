@@ -3,24 +3,67 @@ require 'ox'
 
 #workarounds
 module Ox
-	class Element
-		def xpath(path,ns)
-			pat = /\/\/.+:/
-			l1=path.sub(pat,'')
-
-      queue=[self]
-      r=[]
-      until queue.empty?
-        p = queue.shift
-        r << p if p.value == l1
-        queue.concat(p.nodes) unless p.children.empty? or !r.empty?
+  module XPathSubset
+    class Query 
+      attr_reader :type, :name, :ns
+      def initialize(t,e,n)
+        @type, @name, @ns = t, e, n
       end
 
-			if r.size == 1 and l1 == 'jid'
-				r=r.first
-			end
+      def match(elem, ns_mapping)
+        wanted_ns = ns_mapping[ns]
 
-			r
+        same_value = elem.value == name 
+        same_ns    = elem.xmlns == wanted_ns
+
+        matching = same_value & same_ns
+
+        ret = []
+        ret << elem if matching
+
+        case type
+        when 'normal'
+          #nothing
+        when 'relative', 'anywhere' #TODO: for anywhere, should go to the root first, is that even possible?
+          elem.children.each do |n|
+            match(n, ns_mapping).each {|m| ret << m}
+          end
+        else
+          raise NotImplementedError
+        end
+
+        ret
+      end
+    end
+  end
+
+	class Element
+    attr_accessor :xmlns
+    def parse_xpath(path)
+      queries = path.split('|').map(&:strip).map do |str|
+        kind = if str.start_with?("//")
+                 'anywhere'
+               elsif str.start_with?(".//")
+                 'relative'
+               else
+                 'normal'
+               end
+        rest = str.tr('/','')
+        ns,name = rest.split(':',2)
+        name,ns = ns,nil unless name
+        XPathSubset::Query.new(kind, name, ns)
+      end
+    end
+
+		def xpath(path,ns_mapping)
+      queries = parse_xpath(path)
+      elems = []
+      queries.each do |q|
+        q.match(self,ns_mapping).each do |n|
+          elems << n
+        end
+      end
+      elems.uniq
 		end
 
 		def children
@@ -85,6 +128,7 @@ module EM::Xmpp
 
     def xml_start_element_namespace(name, attrs=[],prefix=nil,uri=nil,ns=[])
       node = Ox::Element.new(name)
+      node.xmlns = uri
       attrs.each do |attr|
         #attr is a Struct with members localname/prefix/uri/value
         node[attr.localname] = attr.value
