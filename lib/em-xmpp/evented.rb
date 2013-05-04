@@ -36,16 +36,16 @@ module EM::Xmpp
       {'type' => 'get', 'id' => "em-xmpp.#{rand(65535)}"}
     end
 
-    def presence_stanza(*args)
-      OutgoingStanza.new('presence', default_presence_params, *args)
+    def presence_stanza(*args,&blk)
+      OutgoingStanza.new('presence', default_presence_params, *args,&blk)
     end
 
-    def message_stanza(*args)
-      OutgoingStanza.new('message',default_message_params,*args)
+    def message_stanza(*args,&blk)
+      OutgoingStanza.new('message',default_message_params,*args,&blk)
     end
 
-    def iq_stanza(*args)
-      OutgoingStanza.new('iq', default_iq_params, *args)
+    def iq_stanza(*args,&blk)
+      OutgoingStanza.new('iq', default_iq_params, *args,&blk)
     end
 
     def send_stanza(stanza)

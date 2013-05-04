@@ -8,15 +8,21 @@ module Ox
 		#   @param [String|Element|Array] children text, child element or array of elements
 		def x(name, *args)
 			n = Element.new(name)
+      *yielded = if block_given?
+                  yield
+                else 
+                  []
+                end
+      values = *args + yielded
 
-			for arg in args
-				case arg
+			values.each do |val|
+				case val
 				when Hash
-					arg.each { |k,v| n[k.to_s] = v }
+					val.each { |k,v| n[k.to_s] = v }
 				when Array
-					arg.each { |c| n << c if c}
+					val.each { |c| n << c if c}
 				else
-					n << arg if arg
+					n << val if val
 				end
 			end
 
@@ -39,8 +45,8 @@ module EM::Xmpp
       
       attr_accessor :xml,:params
 
-      def initialize(*args)
-        node = x(*args)
+      def initialize(*args,&blk)
+        node = x(*args,&blk)
         @xml = Ox.dump(node)
         @params = node.attributes
       end
