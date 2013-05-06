@@ -16,6 +16,7 @@ certdir = ARGV[4]
 module RosterClient
   attr_reader :roster
 
+  include EM::Xmpp::XmlParser::Nokogiri
   include EM::Xmpp::Helpers
 
   def ready
