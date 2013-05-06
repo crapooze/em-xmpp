@@ -166,7 +166,7 @@ module EM::Xmpp
           'hash' => filedesc[:md5],
           'date' => filedesc[:date]
         }
-        iq = connection.iq_stanza('to'=>jid,'type'=>'set') do |xml|
+        iq = connection.iq_stanza('to'=>jid,'type'=>'set') do
           x('si',{:xmlns => EM::Xmpp::Namespaces::StreamInitiation, :id => sid}.merge(si_args)) do
             x('file', {:xmlns => EM::Xmpp::Namespaces::FileTransfer}.merge(file_args)) do
               x('desc', filedesc[:description])
